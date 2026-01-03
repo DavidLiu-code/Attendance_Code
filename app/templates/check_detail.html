@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card stack">
+  <div>
+    <h2>Check {{ check.id }}</h2>
+    <p class="muted">Timestamp: {{ check.timestamp.strftime("%Y-%m-%d %H:%M") }}</p>
+  </div>
+  <div class="inline">
+    <span class="muted">Total people: {{ people|length }}</span>
+    <span class="muted">Unmarked: {{ unmarked_count }}</span>
+  </div>
+  <form method="post" action="/checks/{{ check.id }}/marks" class="stack">
+    <table>
+      <thead>
+        <tr>
+          <th>Person</th>
+          <th>Mark</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for person in people %}
+        <tr>
+          <td>{{ person.name }}</td>
+          <td>
+            <select name="mark_{{ person.id }}">
+              <option value="unmarked" {% if marks.get(person.id) is none %}selected{% endif %}>Unmarked</option>
+              <option value="present" {% if marks.get(person.id) == "present" %}selected{% endif %}>Present</option>
+              <option value="absent" {% if marks.get(person.id) == "absent" %}selected{% endif %}>Absent</option>
+            </select>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="inline">
+      <button type="submit">Save marks</button>
+      <a class="button secondary" href="/checks">Back to checks</a>
+    </div>
+  </form>
+  <form method="post" action="/checks/{{ check.id }}/delete" onsubmit="return confirm('Delete this check? This will remove all marks.');">
+    <button class="button danger" type="submit">Delete check</button>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <h2>{{ person.name }} salary history</h2>
+  <p class="muted">Current salary: {{ person.current_salary }}</p>
+  {% if history %}
+  <table>
+    <thead>
+      <tr>
+        <th>Month</th>
+        <th>Before</th>
+        <th>Delta</th>
+        <th>After</th>
+        <th>Reason</th>
+        <th>Computed at</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in history %}
+      <tr>
+        <td>{{ row.month }}</td>
+        <td>{{ row.salary_before }}</td>
+        <td>{{ row.delta }}</td>
+        <td>{{ row.salary_after }}</td>
+        <td>{{ row.reason }}</td>
+        <td>{{ row.computed_at.strftime("%Y-%m-%d %H:%M") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="muted">No salary history yet.</p>
+  {% endif %}
+  <div class="inline">
+    <a class="button secondary" href="/">Back to people</a>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="grid">
+  <section class="card stack">
+    <h2>Create check</h2>
+    <form method="post" action="/checks" class="stack">
+      <div>
+        <label for="timestamp">Timestamp ({{ timezone_name }})</label>
+        <input id="timestamp" type="datetime-local" name="timestamp">
+      </div>
+      <button type="submit">Create check</button>
+    </form>
+    <p class="muted">Leave blank to use current time.</p>
+  </section>
+
+  <section class="card stack">
+    <h2>Filter</h2>
+    <form method="get" action="/checks" class="inline">
+      <div>
+        <label for="month">Month</label>
+        <input id="month" type="month" name="month" value="{{ month or '' }}">
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <button type="submit">Apply</button>
+      </div>
+      {% if month %}
+      <div>
+        <label>&nbsp;</label>
+        <a class="button secondary" href="/checks">Clear</a>
+      </div>
+      {% endif %}
+    </form>
+  </section>
+</div>
+
+<section class="card">
+  <h2>Checks</h2>
+  {% if checks %}
+  <table>
+    <thead>
+      <tr>
+        <th>Timestamp</th>
+        <th>Present</th>
+        <th>Absent</th>
+        <th>Unmarked</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for row in checks %}
+      <tr>
+        <td>{{ row.check.timestamp.strftime("%Y-%m-%d %H:%M") }}</td>
+        <td class="count">{{ row.present }}</td>
+        <td class="count">{{ row.absent }}</td>
+        <td class="count">{{ row.unmarked }}</td>
+        <td><a class="button secondary" href="/checks/{{ row.check.id }}">Open</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="pagination">
+    {% if page > 1 %}
+      <a class="button secondary" href="/checks?page={{ page - 1 }}{% if month %}&month={{ month }}{% endif %}">Prev</a>
+    {% endif %}
+    <span class="muted">Page {{ page }} of {{ total_pages }}</span>
+    {% if page < total_pages %}
+      <a class="button secondary" href="/checks?page={{ page + 1 }}{% if month %}&month={{ month }}{% endif %}">Next</a>
+    {% endif %}
+  </div>
+  {% else %}
+    <p class="muted">No checks yet. Create one to start marking attendance.</p>
+  {% endif %}
+</section>
+{% endblock %}

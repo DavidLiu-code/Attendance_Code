@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title or "Attendance + Salary" }}</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=Fraunces:wght@600&display=swap");
+      :root {
+        --bg: #f7f2e9;
+        --bg2: #e6f1ee;
+        --card: #ffffff;
+        --text: #1f2a2e;
+        --muted: #52636b;
+        --accent: #1b7f7a;
+        --accent-dark: #145e5a;
+        --warn: #b25b1e;
+        --danger: #9a3b34;
+        --border: #d8e0df;
+        --shadow: 0 10px 30px rgba(20, 40, 50, 0.08);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: "IBM Plex Sans", "Trebuchet MS", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top right, #e4f3f0, transparent 55%),
+          linear-gradient(135deg, var(--bg), var(--bg2));
+        min-height: 100vh;
+      }
+      h1, h2, h3 {
+        font-family: "Fraunces", "Georgia", serif;
+        margin: 0 0 0.6rem 0;
+      }
+      a {
+        color: var(--accent-dark);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      .nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.2rem 2rem;
+        background: rgba(255, 255, 255, 0.85);
+        border-bottom: 1px solid var(--border);
+        backdrop-filter: blur(8px);
+        position: sticky;
+        top: 0;
+        z-index: 5;
+      }
+      .brand {
+        font-weight: 600;
+        letter-spacing: 0.5px;
+      }
+      .nav a {
+        margin-right: 1rem;
+        font-weight: 600;
+      }
+      .container {
+        max-width: 1100px;
+        margin: 2rem auto 3rem;
+        padding: 0 1.5rem;
+        animation: rise 0.5s ease-out;
+      }
+      @keyframes rise {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .grid {
+        display: grid;
+        gap: 1.5rem;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      }
+      .card {
+        background: var(--card);
+        border-radius: 16px;
+        box-shadow: var(--shadow);
+        padding: 1.5rem;
+        border: 1px solid var(--border);
+      }
+      .stack {
+        display: grid;
+        gap: 0.75rem;
+      }
+      .inline {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        align-items: end;
+      }
+      label {
+        font-weight: 600;
+        font-size: 0.95rem;
+      }
+      input, select {
+        padding: 0.55rem 0.75rem;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        font-size: 0.95rem;
+        width: 100%;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.95rem;
+      }
+      th, td {
+        text-align: left;
+        padding: 0.65rem 0.5rem;
+        border-bottom: 1px solid var(--border);
+      }
+      th {
+        color: var(--muted);
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.08em;
+      }
+      .button, button {
+        background: var(--accent);
+        color: #fff;
+        border: none;
+        padding: 0.55rem 1rem;
+        border-radius: 999px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .button.secondary {
+        background: #dbe8e6;
+        color: var(--accent-dark);
+      }
+      .button.danger {
+        background: var(--danger);
+      }
+      .notice {
+        padding: 0.75rem 1rem;
+        border-radius: 10px;
+        margin-bottom: 1rem;
+        font-weight: 600;
+      }
+      .notice.success {
+        background: #e2f4ef;
+        color: #1d5a50;
+      }
+      .notice.error {
+        background: #f8e6e4;
+        color: #8d2e28;
+      }
+      .notice.warn {
+        background: #f7efe3;
+        color: #8b4a1a;
+      }
+      .pill {
+        padding: 0.2rem 0.65rem;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        display: inline-block;
+      }
+      .pill.active {
+        background: #e2f4ef;
+        color: #1d5a50;
+      }
+      .pill.inactive {
+        background: #f1f1f1;
+        color: #6c6c6c;
+      }
+      .muted {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+      .pagination {
+        margin-top: 1rem;
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+      }
+      .count {
+        font-weight: 600;
+        color: var(--accent-dark);
+      }
+      @media (max-width: 720px) {
+        .nav {
+          padding: 1rem;
+        }
+        .container {
+          padding: 0 1rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="nav">
+      <div class="brand">Attendance + Salary</div>
+      <div>
+        <a href="/">People</a>
+        <a href="/checks">Checks</a>
+        <a href="/months/close">Monthly Ops</a>
+        <a href="/export/salary_history.csv">Export CSV</a>
+      </div>
+    </nav>
+    <main class="container">
+      {% if msg %}
+        <div class="notice success">{{ msg }}</div>
+      {% endif %}
+      {% if error %}
+        <div class="notice error">{{ error }}</div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </main>
+  </body>
+</html>
