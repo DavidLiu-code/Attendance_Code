@@ -30,6 +30,17 @@ The app listens on `127.0.0.1:8000`, intended for a host Nginx reverse proxy.
 ## Configuration
 
 - `APP_TIMEZONE`: defaults to `Asia/Shanghai` (Beijing time).
+- `APP_SECRET_KEY`: session secret for admin login (set this in production).
+
+## Admin accounts
+
+The app seeds three admin accounts on first run:
+
+- `professor1` / `professor123`
+- `professor2` / `professor123`
+- `professor3` / `professor123`
+
+Only admins can create/edit checks and activate/deactivate people. Change passwords by editing the `users` table in the database.
 
 ## Nginx (host reverse proxy)
 

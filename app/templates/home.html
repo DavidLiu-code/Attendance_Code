@@ -13,31 +13,53 @@
     <p class="muted">Starting salary is {{ start_salary }}.</p>
   </section>
 
-  <section class="card">
-    <h2>People</h2>
-    {% if people %}
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Salary</th>
-          <th>Status</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-      {% for person in people %}
-        <tr>
-          <td><a href="/people/{{ person.id }}">{{ person.name }}</a></td>
-          <td>{{ person.current_salary }}</td>
-          <td>
-            {% if person.active %}
-              <span class="pill active">Active</span>
-            {% else %}
-              <span class="pill inactive">Inactive</span>
-            {% endif %}
-          </td>
-          <td>
+  <section class="card stack">
+    <h2>Absence overview</h2>
+    {% if absent_stats %}
+      <div class="chart">
+        {% for row in absent_stats %}
+        <div class="bar-row">
+          <div class="bar-label">{{ row.name }}</div>
+          <div class="bar-wrap">
+            <div class="bar" style="width: {{ row.width }}%"></div>
+          </div>
+          <div class="bar-count">{{ row.count }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      <p class="muted">Showing active people with more than 1 absence.</p>
+    {% else %}
+      <p class="muted">No active people with more than 1 absence.</p>
+    {% endif %}
+  </section>
+</div>
+
+<section class="card">
+  <h2>People</h2>
+  {% if people %}
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Salary</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for person in people %}
+      <tr>
+        <td><a href="/people/{{ person.id }}">{{ person.name }}</a></td>
+        <td>{{ person.current_salary }}</td>
+        <td>
+          {% if person.active %}
+            <span class="pill active">Active</span>
+          {% else %}
+            <span class="pill inactive">Inactive</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if current_user and current_user.role == "admin" %}
             <form method="post" action="/people/{{ person.id }}/toggle">
               {% if person.active %}
                 <button class="button secondary" type="submit">Deactivate</button>
@@ -45,14 +67,16 @@
                 <button type="submit">Activate</button>
               {% endif %}
             </form>
-          </td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-      <p class="muted">No people yet. Add your first person.</p>
-    {% endif %}
-  </section>
-</div>
+          {% else %}
+            <span class="muted">Admin only</span>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="muted">No people yet. Add your first person.</p>
+  {% endif %}
+</section>
 {% endblock %}

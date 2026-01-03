@@ -1,14 +1,18 @@
 from datetime import datetime
 import math
+import os
 from urllib.parse import urlencode
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import func
 from sqlalchemy.orm import Session
+from starlette.middleware.sessions import SessionMiddleware
 
-from .db import get_db, init_db
-from .models import Check, Mark, Person, SalaryHistory
+from .auth import get_current_user, login_user, logout_user, seed_admin_users, verify_password
+from .db import SessionLocal, get_db, init_db
+from .models import Check, Mark, Person, SalaryHistory, User
 from .services import (
     START_SALARY,
     close_month,
@@ -20,6 +24,11 @@ from .services import (
 )
 
 app = FastAPI(title="Attendance + Salary")
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.getenv("APP_SECRET_KEY", "change-me"),
+    session_cookie="attendance_session",
+)
 
 templates = Jinja2Templates(directory="app/templates")
 
@@ -27,6 +36,11 @@ templates = Jinja2Templates(directory="app/templates")
 @app.on_event("startup")
 def on_startup() -> None:
     init_db()
+    db = SessionLocal()
+    try:
+        seed_admin_users(db)
+    finally:
+        db.close()
 
 
 def redirect(url: str, msg: str | None = None, error: str | None = None, extra: dict | None = None):
@@ -42,20 +56,112 @@ def redirect(url: str, msg: str | None = None, error: str | None = None, extra: 
     return RedirectResponse(url, status_code=303)
 
 
+def require_admin(request: Request, current_user: User | None):
+    if current_user and current_user.role == "admin":
+        return None
+    next_path = request.url.path
+    if request.url.query:
+        next_path = f"{next_path}?{request.url.query}"
+    return redirect(
+        "/login",
+        error="Admin login required.",
+        extra={"next": next_path},
+    )
+
+
+def safe_next(next_path: str | None) -> str:
+    if next_path and next_path.startswith("/") and not next_path.startswith("//"):
+        return next_path
+    return "/"
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page(
+    request: Request,
+    current_user: User | None = Depends(get_current_user),
+    next: str | None = None,
+    msg: str | None = None,
+    error: str | None = None,
+):
+    if current_user:
+        return redirect("/", msg="Already signed in.")
+    return templates.TemplateResponse(
+        "login.html",
+        {
+            "request": request,
+            "next": safe_next(next),
+            "current_user": current_user,
+            "msg": msg,
+            "error": error,
+        },
+    )
+
+
+@app.post("/login")
+def login_action(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    next: str | None = Form(None),
+    db: Session = Depends(get_db),
+):
+    user = db.query(User).filter(User.username == username.strip()).first()
+    if not user or not verify_password(password, user.password_hash):
+        return templates.TemplateResponse(
+            "login.html",
+            {
+                "request": request,
+                "next": safe_next(next),
+                "current_user": None,
+                "error": "Invalid username or password.",
+            },
+            status_code=401,
+        )
+    login_user(request, user)
+    return redirect(safe_next(next), msg="Signed in.")
+
+
+@app.post("/logout")
+def logout_action(request: Request):
+    logout_user(request)
+    return redirect("/", msg="Signed out.")
+
+
 @app.get("/", response_class=HTMLResponse)
 def home(
     request: Request,
     db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user),
     msg: str | None = None,
     error: str | None = None,
 ):
     people = db.query(Person).order_by(Person.name).all()
+    absent_rows = (
+        db.query(Person.name.label("name"), func.count(Mark.id).label("count"))
+        .join(Mark, Mark.person_id == Person.id)
+        .filter(Person.active.is_(True), Mark.status == "absent")
+        .group_by(Person.id)
+        .having(func.count(Mark.id) > 1)
+        .order_by(func.count(Mark.id).desc())
+        .all()
+    )
+    max_count = max((row.count for row in absent_rows), default=0)
+    absent_stats = [
+        {
+            "name": row.name,
+            "count": row.count,
+            "width": int((row.count / max_count) * 100) if max_count else 0,
+        }
+        for row in absent_rows
+    ]
     return templates.TemplateResponse(
         "home.html",
         {
             "request": request,
             "people": people,
+            "absent_stats": absent_stats,
             "start_salary": START_SALARY,
+            "current_user": current_user,
             "msg": msg,
             "error": error,
         },
@@ -79,7 +185,15 @@ def add_person(name: str = Form(...), db: Session = Depends(get_db)):
 
 
 @app.post("/people/{person_id}/toggle")
-def toggle_person(person_id: int, db: Session = Depends(get_db)):
+def toggle_person(
+    person_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user),
+):
+    guard = require_admin(request, current_user)
+    if guard:
+        return guard
     person = db.get(Person, person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
@@ -94,6 +208,7 @@ def person_history(
     request: Request,
     person_id: int,
     db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user),
     msg: str | None = None,
     error: str | None = None,
 ):
@@ -112,6 +227,7 @@ def person_history(
             "request": request,
             "person": person,
             "history": history,
+            "current_user": current_user,
             "msg": msg,
             "error": error,
         },
@@ -122,11 +238,15 @@ def person_history(
 def list_checks(
     request: Request,
     db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user),
     page: int = 1,
     month: str | None = None,
     msg: str | None = None,
     error: str | None = None,
 ):
+    guard = require_admin(request, current_user)
+    if guard:
+        return guard
     page_size = 20
     query = db.query(Check)
 
@@ -147,11 +267,16 @@ def list_checks(
         .all()
     )
 
-    total_people = db.query(Person).count()
+    total_people = db.query(Person).filter(Person.active.is_(True)).count()
     check_ids = [check.id for check in checks]
     counts = {check_id: {"present": 0, "absent": 0} for check_id in check_ids}
     if check_ids:
-        marks = db.query(Mark).filter(Mark.check_id.in_(check_ids)).all()
+        marks = (
+            db.query(Mark)
+            .join(Person, Mark.person_id == Person.id)
+            .filter(Mark.check_id.in_(check_ids), Person.active.is_(True))
+            .all()
+        )
         for mark in marks:
             if mark.status in counts[mark.check_id]:
                 counts[mark.check_id][mark.status] += 1
@@ -183,6 +308,7 @@ def list_checks(
             "total_pages": total_pages,
             "month": month,
             "timezone_name": timezone_name,
+            "current_user": current_user,
             "msg": msg,
             "error": error,
         },
@@ -190,7 +316,15 @@ def list_checks(
 
 
 @app.post("/checks")
-def create_check(timestamp: str | None = Form(None), db: Session = Depends(get_db)):
+def create_check(
+    request: Request,
+    timestamp: str | None = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user),
+):
+    guard = require_admin(request, current_user)
+    if guard:
+        return guard
     if timestamp:
         try:
             parsed = datetime.fromisoformat(timestamp)
@@ -210,15 +344,24 @@ def check_detail(
     request: Request,
     check_id: int,
     db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user),
     msg: str | None = None,
     error: str | None = None,
 ):
+    guard = require_admin(request, current_user)
+    if guard:
+        return guard
     check = db.get(Check, check_id)
     if not check:
         raise HTTPException(status_code=404, detail="Check not found")
 
-    people = db.query(Person).order_by(Person.name).all()
-    marks = db.query(Mark).filter(Mark.check_id == check_id).all()
+    people = db.query(Person).filter(Person.active.is_(True)).order_by(Person.name).all()
+    marks = (
+        db.query(Mark)
+        .join(Person, Mark.person_id == Person.id)
+        .filter(Mark.check_id == check_id, Person.active.is_(True))
+        .all()
+    )
     mark_map = {mark.person_id: mark.status for mark in marks}
     unmarked_count = max(0, len(people) - len(marks))
 
@@ -230,6 +373,7 @@ def check_detail(
             "people": people,
             "marks": mark_map,
             "unmarked_count": unmarked_count,
+            "current_user": current_user,
             "msg": msg,
             "error": error,
         },
@@ -238,15 +382,26 @@ def check_detail(
 
 @app.post("/checks/{check_id}/marks")
 async def update_marks(
-    check_id: int, request: Request, db: Session = Depends(get_db)
+    check_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user),
 ):
+    guard = require_admin(request, current_user)
+    if guard:
+        return guard
     check = db.get(Check, check_id)
     if not check:
         raise HTTPException(status_code=404, detail="Check not found")
 
     form = await request.form()
-    people = db.query(Person).all()
-    existing_marks = db.query(Mark).filter(Mark.check_id == check_id).all()
+    people = db.query(Person).filter(Person.active.is_(True)).all()
+    existing_marks = (
+        db.query(Mark)
+        .join(Person, Mark.person_id == Person.id)
+        .filter(Mark.check_id == check_id, Person.active.is_(True))
+        .all()
+    )
     mark_map = {mark.person_id: mark for mark in existing_marks}
 
     for person in people:
@@ -270,7 +425,15 @@ async def update_marks(
 
 
 @app.post("/checks/{check_id}/delete")
-def delete_check(check_id: int, db: Session = Depends(get_db)):
+def delete_check(
+    check_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user),
+):
+    guard = require_admin(request, current_user)
+    if guard:
+        return guard
     check = db.get(Check, check_id)
     if not check:
         raise HTTPException(status_code=404, detail="Check not found")
@@ -283,6 +446,7 @@ def delete_check(check_id: int, db: Session = Depends(get_db)):
 def month_close_page(
     request: Request,
     db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user),
     month: str | None = None,
     msg: str | None = None,
     error: str | None = None,
@@ -307,6 +471,7 @@ def month_close_page(
             "month": month,
             "preview": preview,
             "already_closed": already_closed,
+            "current_user": current_user,
             "msg": msg,
             "error": error,
         },

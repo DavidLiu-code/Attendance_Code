@@ -19,6 +19,16 @@ class Person(Base):
     salary_history = relationship("SalaryHistory", back_populates="person")
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True)
+    username = Column(String, unique=True, nullable=False)
+    password_hash = Column(String, nullable=False)
+    role = Column(String, default="admin", nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class Check(Base):
     __tablename__ = "checks"
 
