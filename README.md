@@ -74,9 +74,9 @@ Security groups should allow 443 (and 8080 if you expose it). Port 8000 stays in
 
 ## Example workflow
 
-1. Add people on the Home page.
+1. Add people on the People page (admin only).
 2. Create a check on the Checks page (timestamp optional).
 3. Open the check and mark everyone present/absent.
 4. Close a month under Monthly Ops to apply salary changes.
-5. View a person's salary history and export CSV.
+5. View a person's salary history and export CSV (salary history + attendance).
 6. If you edit past checks or marks, use Recalculate All.

@@ -75,6 +75,36 @@ def safe_next(next_path: str | None) -> str:
     return "/"
 
 
+def build_people_cards(db: Session, total_checks: int):
+    people = db.query(Person).order_by(Person.name).all()
+    absent_counts = dict(
+        db.query(Mark.person_id, func.count(Mark.id))
+        .filter(Mark.status == "absent")
+        .group_by(Mark.person_id)
+        .all()
+    )
+    marked_counts = dict(
+        db.query(Mark.person_id, func.count(Mark.id)).group_by(Mark.person_id).all()
+    )
+    cards = []
+    for person in people:
+        absent_count = absent_counts.get(person.id, 0)
+        marked_count = marked_counts.get(person.id, 0)
+        if total_checks:
+            absence_rate = f"{(absent_count / total_checks) * 100:.1f}%"
+        else:
+            absence_rate = "N/A"
+        cards.append(
+            {
+                "person": person,
+                "absent_count": absent_count,
+                "absence_rate": absence_rate,
+                "missing_count": max(0, total_checks - marked_count),
+            }
+        )
+    return cards
+
+
 @app.get("/login", response_class=HTMLResponse)
 def login_page(
     request: Request,
@@ -127,6 +157,48 @@ def logout_action(request: Request):
     return redirect("/", msg="Signed out.")
 
 
+@app.get("/people", response_class=HTMLResponse)
+def people_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user),
+    msg: str | None = None,
+    error: str | None = None,
+):
+    total_checks = db.query(func.count(Check.id)).scalar() or 0
+    people_cards = build_people_cards(db, total_checks)
+    return templates.TemplateResponse(
+        "people.html",
+        {
+            "request": request,
+            "people_cards": people_cards,
+            "total_checks": total_checks,
+            "start_salary": START_SALARY,
+            "current_user": current_user,
+            "msg": msg,
+            "error": error,
+        },
+    )
+
+
+@app.get("/export", response_class=HTMLResponse)
+def export_page(
+    request: Request,
+    current_user: User | None = Depends(get_current_user),
+    msg: str | None = None,
+    error: str | None = None,
+):
+    return templates.TemplateResponse(
+        "export.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "msg": msg,
+            "error": error,
+        },
+    )
+
+
 @app.get("/", response_class=HTMLResponse)
 def home(
     request: Request,
@@ -135,7 +207,6 @@ def home(
     msg: str | None = None,
     error: str | None = None,
 ):
-    people = db.query(Person).order_by(Person.name).all()
     total_checks = db.query(func.count(Check.id)).scalar() or 0
     last_check = db.query(Check).order_by(Check.timestamp.desc()).first()
     active_people_count = db.query(func.count(Person.id)).filter(Person.active.is_(True)).scalar() or 0
@@ -149,31 +220,6 @@ def home(
     avg_absences_active = (
         total_absences_active / active_people_count if active_people_count else 0
     )
-    absent_counts = dict(
-        db.query(Mark.person_id, func.count(Mark.id))
-        .filter(Mark.status == "absent")
-        .group_by(Mark.person_id)
-        .all()
-    )
-    marked_counts = dict(
-        db.query(Mark.person_id, func.count(Mark.id)).group_by(Mark.person_id).all()
-    )
-    people_cards = []
-    for person in people:
-        absent_count = absent_counts.get(person.id, 0)
-        marked_count = marked_counts.get(person.id, 0)
-        if total_checks:
-            absence_rate = f"{(absent_count / total_checks) * 100:.1f}%"
-        else:
-            absence_rate = "N/A"
-        people_cards.append(
-            {
-                "person": person,
-                "absent_count": absent_count,
-                "absence_rate": absence_rate,
-                "missing_count": max(0, total_checks - marked_count),
-            }
-        )
     absent_rows = (
         db.query(Person.name.label("name"), func.count(Mark.id).label("count"))
         .join(Mark, Mark.person_id == Person.id)
@@ -196,13 +242,11 @@ def home(
         "home.html",
         {
             "request": request,
-            "people_cards": people_cards,
             "absent_stats": absent_stats,
             "total_checks": total_checks,
             "last_check": last_check,
             "total_absences_active": total_absences_active,
             "avg_absences_active": avg_absences_active,
-            "start_salary": START_SALARY,
             "current_user": current_user,
             "msg": msg,
             "error": error,
@@ -612,4 +656,51 @@ def export_salary_history(db: Session = Depends(get_db)):
             output.truncate(0)
 
     headers = {"Content-Disposition": "attachment; filename=salary_history.csv"}
+    return StreamingResponse(generate(), media_type="text/csv", headers=headers)
+
+
+@app.get("/export/attendance.csv")
+def export_attendance(db: Session = Depends(get_db)):
+    checks = db.query(Check).order_by(Check.timestamp).all()
+    people = db.query(Person).order_by(Person.name).all()
+    marks = db.query(Mark).all()
+    mark_map = {(mark.check_id, mark.person_id): mark.status for mark in marks}
+
+    import csv
+    import io
+
+    def generate():
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(
+            [
+                "check_id",
+                "check_timestamp",
+                "person",
+                "person_active",
+                "status",
+            ]
+        )
+        yield output.getvalue()
+        output.seek(0)
+        output.truncate(0)
+
+        for check in checks:
+            ts = check.timestamp.isoformat(sep=" ")
+            for person in people:
+                status = mark_map.get((check.id, person.id), "unmarked")
+                writer.writerow(
+                    [
+                        check.id,
+                        ts,
+                        person.name,
+                        "active" if person.active else "inactive",
+                        status,
+                    ]
+                )
+                yield output.getvalue()
+                output.seek(0)
+                output.truncate(0)
+
+    headers = {"Content-Disposition": "attachment; filename=attendance.csv"}
     return StreamingResponse(generate(), media_type="text/csv", headers=headers)

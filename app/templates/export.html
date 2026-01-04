@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card stack">
+  <h2>Export CSV</h2>
+  <div class="stack">
+    <a class="button secondary" href="/export/salary_history.csv">Download salary history CSV</a>
+    <a class="button secondary" href="/export/attendance.csv">Download attendance CSV</a>
+  </div>
+  <p class="muted">Attendance export includes a row per check per person (present/absent/unmarked).</p>
+</section>
+{% endblock %}
