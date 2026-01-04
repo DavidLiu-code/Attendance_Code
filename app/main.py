@@ -75,17 +75,28 @@ def safe_next(next_path: str | None) -> str:
     return "/"
 
 
-def build_people_cards(db: Session, total_checks: int):
+def build_people_cards(
+    db: Session,
+    total_checks: int,
+    checks_start: datetime | None = None,
+    checks_end: datetime | None = None,
+):
     people = db.query(Person).order_by(Person.name).all()
-    absent_counts = dict(
+    absent_query = (
         db.query(Mark.person_id, func.count(Mark.id))
         .filter(Mark.status == "absent")
-        .group_by(Mark.person_id)
-        .all()
     )
-    marked_counts = dict(
-        db.query(Mark.person_id, func.count(Mark.id)).group_by(Mark.person_id).all()
-    )
+    marked_query = db.query(Mark.person_id, func.count(Mark.id))
+    if checks_start and checks_end:
+        absent_query = absent_query.join(Check, Mark.check_id == Check.id).filter(
+            Check.timestamp >= checks_start, Check.timestamp < checks_end
+        )
+        marked_query = marked_query.join(Check, Mark.check_id == Check.id).filter(
+            Check.timestamp >= checks_start, Check.timestamp < checks_end
+        )
+
+    absent_counts = dict(absent_query.group_by(Mark.person_id).all())
+    marked_counts = dict(marked_query.group_by(Mark.person_id).all())
     cards = []
     for person in people:
         absent_count = absent_counts.get(person.id, 0)
@@ -165,14 +176,32 @@ def people_page(
     msg: str | None = None,
     error: str | None = None,
 ):
-    total_checks = db.query(func.count(Check.id)).scalar() or 0
-    people_cards = build_people_cards(db, total_checks)
+    now = now_local()
+    current_month = f"{now.year:04d}-{now.month:02d}"
+    month_start, month_end = month_start_end(current_month)
+    if current_user and current_user.role == "admin":
+        total_checks = db.query(func.count(Check.id)).scalar() or 0
+        people_cards = build_people_cards(db, total_checks)
+        scope_label = "all checks"
+    else:
+        total_checks = (
+            db.query(func.count(Check.id))
+            .filter(Check.timestamp >= month_start, Check.timestamp < month_end)
+            .scalar()
+            or 0
+        )
+        people_cards = build_people_cards(
+            db, total_checks, checks_start=month_start, checks_end=month_end
+        )
+        people_cards = [card for card in people_cards if card["absent_count"] > 3]
+        scope_label = f"{current_month}"
     return templates.TemplateResponse(
         "people.html",
         {
             "request": request,
             "people_cards": people_cards,
             "total_checks": total_checks,
+            "scope_label": scope_label,
             "start_salary": START_SALARY,
             "current_user": current_user,
             "msg": msg,
@@ -188,6 +217,9 @@ def export_page(
     msg: str | None = None,
     error: str | None = None,
 ):
+    guard = require_admin(request, current_user)
+    if guard:
+        return guard
     return templates.TemplateResponse(
         "export.html",
         {
@@ -207,23 +239,47 @@ def home(
     msg: str | None = None,
     error: str | None = None,
 ):
+    now = now_local()
+    current_month = f"{now.year:04d}-{now.month:02d}"
+    month_start, month_end = month_start_end(current_month)
     total_checks = db.query(func.count(Check.id)).scalar() or 0
     last_check = db.query(Check).order_by(Check.timestamp.desc()).first()
     active_people_count = db.query(func.count(Person.id)).filter(Person.active.is_(True)).scalar() or 0
-    total_absences_active = (
-        db.query(func.count(Mark.id))
-        .join(Person, Mark.person_id == Person.id)
-        .filter(Person.active.is_(True), Mark.status == "absent")
+    month_checks_count = (
+        db.query(func.count(Check.id))
+        .filter(Check.timestamp >= month_start, Check.timestamp < month_end)
         .scalar()
         or 0
     )
-    avg_absences_active = (
-        total_absences_active / active_people_count if active_people_count else 0
+    total_absences_active = (
+        db.query(func.count(Mark.id))
+        .join(Person, Mark.person_id == Person.id)
+        .join(Check, Mark.check_id == Check.id)
+        .filter(
+            Person.active.is_(True),
+            Mark.status == "absent",
+            Check.timestamp >= month_start,
+            Check.timestamp < month_end,
+        )
+        .scalar()
+        or 0
     )
+    if active_people_count and month_checks_count:
+        avg_absences_active = (
+            total_absences_active / (active_people_count * month_checks_count) * 100
+        )
+    else:
+        avg_absences_active = 0
     absent_rows = (
         db.query(Person.name.label("name"), func.count(Mark.id).label("count"))
         .join(Mark, Mark.person_id == Person.id)
-        .filter(Person.active.is_(True), Mark.status == "absent")
+        .join(Check, Mark.check_id == Check.id)
+        .filter(
+            Person.active.is_(True),
+            Mark.status == "absent",
+            Check.timestamp >= month_start,
+            Check.timestamp < month_end,
+        )
         .group_by(Person.id)
         .having(func.count(Mark.id) > 3)
         .order_by(func.count(Mark.id).desc())
@@ -247,6 +303,7 @@ def home(
             "last_check": last_check,
             "total_absences_active": total_absences_active,
             "avg_absences_active": avg_absences_active,
+            "current_month": current_month,
             "current_user": current_user,
             "msg": msg,
             "error": error,
@@ -576,6 +633,9 @@ def month_close_page(
     msg: str | None = None,
     error: str | None = None,
 ):
+    guard = require_admin(request, current_user)
+    if guard:
+        return guard
     preview = None
     already_closed = False
 
@@ -604,7 +664,15 @@ def month_close_page(
 
 
 @app.post("/months/close")
-def month_close_action(month: str = Form(...), db: Session = Depends(get_db)):
+def month_close_action(
+    request: Request,
+    month: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user),
+):
+    guard = require_admin(request, current_user)
+    if guard:
+        return guard
     try:
         months = close_month(db, month)
     except ValueError as exc:
@@ -617,13 +685,27 @@ def month_close_action(month: str = Form(...), db: Session = Depends(get_db)):
 
 
 @app.post("/months/recalculate")
-def month_recalculate(db: Session = Depends(get_db)):
+def month_recalculate(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user),
+):
+    guard = require_admin(request, current_user)
+    if guard:
+        return guard
     months = recalculate_all(db)
     return redirect("/months/close", msg=f"Recalculated {months} month(s).")
 
 
 @app.get("/export/salary_history.csv")
-def export_salary_history(db: Session = Depends(get_db)):
+def export_salary_history(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user),
+):
+    guard = require_admin(request, current_user)
+    if guard:
+        return guard
     rows = (
         db.query(SalaryHistory, Person)
         .join(Person, SalaryHistory.person_id == Person.id)
@@ -703,7 +785,14 @@ def export_salary_history(db: Session = Depends(get_db)):
 
 
 @app.get("/export/attendance.csv")
-def export_attendance(db: Session = Depends(get_db)):
+def export_attendance(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user),
+):
+    guard = require_admin(request, current_user)
+    if guard:
+        return guard
     checks = db.query(Check).order_by(Check.timestamp).all()
     people = db.query(Person).order_by(Person.name).all()
     marks = db.query(Mark).all()

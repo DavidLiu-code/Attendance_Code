@@ -130,6 +130,6 @@ def test_multi_month_recalc_correctness(db):
     assert history[0].salary_before == START_SALARY
     assert history[0].salary_after == START_SALARY + SALARY_STEP
     assert history[1].salary_before == START_SALARY + SALARY_STEP
-    assert history[1].salary_after == START_SALARY
+    assert history[1].salary_after == 0
     db.refresh(person)
-    assert person.current_salary == START_SALARY
+    assert person.current_salary == 0

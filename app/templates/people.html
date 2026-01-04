@@ -3,7 +3,7 @@
 <section class="stack">
   <div class="inline">
     <h2>People</h2>
-    <span class="muted">Absence rate = absences / total checks ({{ total_checks }}).</span>
+    <span class="muted">Absence rate = absences / checks ({{ total_checks }}) for {{ scope_label }}.</span>
   </div>
   <div class="grid">
     {% if current_user and current_user.role == "admin" %}
@@ -66,7 +66,11 @@
       </article>
       {% endfor %}
     {% else %}
-      <p class="muted">No people yet. Add your first person.</p>
+      {% if current_user and current_user.role == "admin" %}
+        <p class="muted">No people yet. Add your first person.</p>
+      {% else %}
+        <p class="muted">No people with more than 3 absences this month.</p>
+      {% endif %}
     {% endif %}
   </div>
 </section>

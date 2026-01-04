@@ -93,7 +93,7 @@ def apply_month_change(current_salary: int, perfect: bool) -> Tuple[int, int, st
     if perfect:
         new_salary = min(SALARY_CAP, current_salary + SALARY_STEP)
     else:
-        new_salary = current_salary - SALARY_STEP
+        new_salary = 0
     delta = new_salary - current_salary
     reason = "perfect" if perfect else "not_perfect"
     return delta, new_salary, reason

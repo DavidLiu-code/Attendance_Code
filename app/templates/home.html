@@ -23,12 +23,12 @@
     <h2>Absence stats</h2>
     <div class="stack">
       <div>
-        <p class="muted">Total absences (active)</p>
+        <p class="muted">Absences this month (active)</p>
         <div class="count">{{ total_absences_active }}</div>
       </div>
       <div>
-        <p class="muted">Avg absences / active person</p>
-        <div class="count">{{ "%.1f"|format(avg_absences_active) }}</div>
+        <p class="muted">Avg absence rate (this month)</p>
+        <div class="count">{{ "%.1f"|format(avg_absences_active) }}%</div>
       </div>
     </div>
   </section>
@@ -47,9 +47,9 @@
         </div>
         {% endfor %}
       </div>
-      <p class="muted">Showing active people with more than 3 absences.</p>
+      <p class="muted">Showing active people with more than 3 absences in {{ current_month }}.</p>
     {% else %}
-      <p class="muted">No active people with more than 3 absences.</p>
+      <p class="muted">No active people with more than 3 absences in {{ current_month }}.</p>
     {% endif %}
   </section>
 </div>
