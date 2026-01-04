@@ -633,6 +633,7 @@ def export_salary_history(db: Session = Depends(get_db)):
 
     import csv
     import io
+    from .services import get_checks_for_month, list_months_with_checks, collect_marks_for_checks, is_perfect_month, apply_month_change
 
     def generate():
         output = io.StringIO()
@@ -652,21 +653,50 @@ def export_salary_history(db: Session = Depends(get_db)):
         output.seek(0)
         output.truncate(0)
 
-        for history, person in rows:
-            writer.writerow(
-                [
-                    person.name,
-                    history.month,
-                    history.salary_before,
-                    history.delta,
-                    history.salary_after,
-                    history.reason,
-                    history.computed_at.isoformat(sep=" "),
-                ]
-            )
-            yield output.getvalue()
-            output.seek(0)
-            output.truncate(0)
+        if rows:
+            for history, person in rows:
+                writer.writerow(
+                    [
+                        person.name,
+                        history.month,
+                        history.salary_before,
+                        history.delta,
+                        history.salary_after,
+                        history.reason,
+                        history.computed_at.isoformat(sep=" "),
+                    ]
+                )
+                yield output.getvalue()
+                output.seek(0)
+                output.truncate(0)
+            return
+
+        months = list_months_with_checks(db)
+        people = db.query(Person).order_by(Person.name).all()
+        salary_map = {person.id: START_SALARY for person in people}
+        computed_at = now_local()
+        for month in months:
+            checks = get_checks_for_month(db, month)
+            marks_by_check = collect_marks_for_checks(db, [check.id for check in checks])
+            for person in people:
+                salary_before = salary_map[person.id]
+                perfect = is_perfect_month(checks, marks_by_check, person.id)
+                delta, salary_after, reason = apply_month_change(salary_before, perfect)
+                writer.writerow(
+                    [
+                        person.name,
+                        month,
+                        salary_before,
+                        delta,
+                        salary_after,
+                        reason,
+                        computed_at.isoformat(sep=" "),
+                    ]
+                )
+                salary_map[person.id] = salary_after
+                yield output.getvalue()
+                output.seek(0)
+                output.truncate(0)
 
     headers = {"Content-Disposition": "attachment; filename=salary_history.csv"}
     return StreamingResponse(generate(), media_type="text/csv", headers=headers)
