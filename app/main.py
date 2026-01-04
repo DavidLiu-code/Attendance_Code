@@ -266,16 +266,16 @@ def add_person(
         return guard
     clean_name = name.strip()
     if not clean_name:
-        return redirect("/", error="Name is required.")
+        return redirect("/people", error="Name is required.")
 
     existing = db.query(Person).filter(Person.name == clean_name).first()
     if existing:
-        return redirect("/", error="Name already exists.")
+        return redirect("/people", error="Name already exists.")
 
     person = Person(name=clean_name, current_salary=START_SALARY, active=True)
     db.add(person)
     db.commit()
-    return redirect("/", msg="Person added.")
+    return redirect("/people", msg="Person added.")
 
 
 @app.post("/people/{person_id}/delete")
@@ -297,7 +297,7 @@ def delete_person(
     )
     db.delete(person)
     db.commit()
-    return redirect("/", msg=f"{person.name} deleted.")
+    return redirect("/people", msg=f"{person.name} deleted.")
 
 
 @app.post("/people/{person_id}/toggle")
@@ -316,7 +316,7 @@ def toggle_person(
     person.active = not person.active
     db.commit()
     state = "activated" if person.active else "deactivated"
-    return redirect("/", msg=f"{person.name} {state}.")
+    return redirect("/people", msg=f"{person.name} {state}.")
 
 
 @app.get("/people/{person_id}", response_class=HTMLResponse)
@@ -337,12 +337,20 @@ def person_history(
         .order_by(SalaryHistory.month)
         .all()
     )
+    checks = db.query(Check).order_by(Check.timestamp.desc()).all()
+    marks = db.query(Mark).filter(Mark.person_id == person_id).all()
+    mark_map = {mark.check_id: mark.status for mark in marks}
+    attendance_rows = [
+        {"check": check, "status": mark_map.get(check.id, "unmarked")}
+        for check in checks
+    ]
     return templates.TemplateResponse(
         "person_history.html",
         {
             "request": request,
             "person": person,
             "history": history,
+            "attendance_rows": attendance_rows,
             "current_user": current_user,
             "msg": msg,
             "error": error,
@@ -449,7 +457,8 @@ def create_check(
     else:
         parsed = now_local()
 
-    check = Check(timestamp=parsed)
+    created_by = current_user.username if current_user else None
+    check = Check(timestamp=parsed, created_by=created_by)
     db.add(check)
     db.commit()
     return redirect(f"/checks/{check.id}", msg="Check created.")
@@ -597,10 +606,14 @@ def month_close_page(
 @app.post("/months/close")
 def month_close_action(month: str = Form(...), db: Session = Depends(get_db)):
     try:
-        close_month(db, month)
+        months = close_month(db, month)
     except ValueError as exc:
         return redirect("/months/close", error=str(exc), extra={"month": month})
-    return redirect("/months/close", msg="Month closed.", extra={"month": month})
+    return redirect(
+        "/months/close",
+        msg=f"Closed {month} (recomputed {months} month(s)).",
+        extra={"month": month},
+    )
 
 
 @app.post("/months/recalculate")
@@ -676,6 +689,7 @@ def export_attendance(db: Session = Depends(get_db)):
             [
                 "check_id",
                 "check_timestamp",
+                "check_created_by",
                 "person",
                 "person_active",
                 "status",
@@ -693,6 +707,7 @@ def export_attendance(db: Session = Depends(get_db)):
                     [
                         check.id,
                         ts,
+                        check.created_by or "Unknown",
                         person.name,
                         "active" if person.active else "inactive",
                         status,

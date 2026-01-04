@@ -100,65 +100,87 @@ def apply_month_change(current_salary: int, perfect: bool) -> Tuple[int, int, st
 
 
 def preview_month(db: Session, month_str: str):
-    checks = get_checks_for_month(db, month_str)
-    marks_by_check = collect_marks_for_checks(db, [check.id for check in checks])
+    months = months_up_to(db, month_str)
     people = db.query(Person).order_by(Person.name).all()
+    salary_map = {person.id: START_SALARY for person in people}
+    target_checks = []
     rows = []
-    for person in people:
-        perfect = is_perfect_month(checks, marks_by_check, person.id)
-        delta, after, reason = apply_month_change(person.current_salary, perfect)
-        rows.append(
-            {
-                "person": person,
-                "perfect": perfect,
-                "delta": delta,
-                "after": after,
-                "reason": reason,
-            }
-        )
+    for month in months:
+        checks = get_checks_for_month(db, month)
+        if month == month_str:
+            target_checks = checks
+        marks_by_check = collect_marks_for_checks(db, [check.id for check in checks])
+        for person in people:
+            salary_before = salary_map[person.id]
+            perfect = is_perfect_month(checks, marks_by_check, person.id)
+            delta, salary_after, reason = apply_month_change(salary_before, perfect)
+            if month == month_str:
+                rows.append(
+                    {
+                        "person": person,
+                        "perfect": perfect,
+                        "delta": delta,
+                        "before": salary_before,
+                        "after": salary_after,
+                        "reason": reason,
+                    }
+                )
+            salary_map[person.id] = salary_after
     return {
         "rows": rows,
-        "checks_count": len(checks),
-        "has_checks": len(checks) > 0,
+        "checks_count": len(target_checks),
+        "has_checks": len(target_checks) > 0,
     }
 
 
 def close_month(db: Session, month_str: str) -> int:
-    if db.query(SalaryHistory).filter(SalaryHistory.month == month_str).first():
-        raise ValueError("Month already closed.")
+    months = months_up_to(db, month_str)
+    if db.query(SalaryHistory).filter(SalaryHistory.month > month_str).first():
+        raise ValueError("Later months already closed. Use Recalculate All.")
 
-    checks = get_checks_for_month(db, month_str)
-    if not checks:
-        raise ValueError("No checks found for this month.")
-
-    marks_by_check = collect_marks_for_checks(db, [check.id for check in checks])
     people = db.query(Person).order_by(Person.name).all()
-    computed_at = now_local()
-
+    db.query(SalaryHistory).filter(SalaryHistory.month.in_(months)).delete(
+        synchronize_session=False
+    )
     for person in people:
-        salary_before = person.current_salary
-        perfect = is_perfect_month(checks, marks_by_check, person.id)
-        delta, salary_after, reason = apply_month_change(salary_before, perfect)
-        history = SalaryHistory(
-            person_id=person.id,
-            month=month_str,
-            salary_before=salary_before,
-            delta=delta,
-            salary_after=salary_after,
-            reason=reason,
-            computed_at=computed_at,
-        )
-        person.current_salary = salary_after
-        db.add(history)
+        person.current_salary = START_SALARY
+
+    computed_at = now_local()
+    for month in months:
+        checks = get_checks_for_month(db, month)
+        marks_by_check = collect_marks_for_checks(db, [check.id for check in checks])
+        for person in people:
+            salary_before = person.current_salary
+            perfect = is_perfect_month(checks, marks_by_check, person.id)
+            delta, salary_after, reason = apply_month_change(salary_before, perfect)
+            history = SalaryHistory(
+                person_id=person.id,
+                month=month,
+                salary_before=salary_before,
+                delta=delta,
+                salary_after=salary_after,
+                reason=reason,
+                computed_at=computed_at,
+            )
+            person.current_salary = salary_after
+            db.add(history)
 
     db.commit()
-    return len(people)
+    return len(months)
 
 
 def list_months_with_checks(db: Session) -> List[str]:
     checks = db.query(Check).all()
     months = sorted({get_month_str(check.timestamp) for check in checks})
     return months
+
+
+def months_up_to(db: Session, month_str: str) -> List[str]:
+    months = list_months_with_checks(db)
+    if month_str not in months:
+        raise ValueError("No checks found for this month.")
+    target_key = parse_month(month_str)
+    return [month for month in months if parse_month(month) <= target_key]
 
 
 def recalculate_all(db: Session) -> int:

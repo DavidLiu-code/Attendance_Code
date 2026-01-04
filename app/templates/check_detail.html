@@ -4,6 +4,7 @@
   <div>
     <h2>Check {{ check.id }}</h2>
     <p class="muted">Timestamp: {{ check.timestamp.strftime("%Y-%m-%d %H:%M") }}</p>
+    <p class="muted">Created by: {{ check.created_by or "Unknown" }}</p>
   </div>
   <div class="inline">
     <span class="muted">Total people: {{ people|length }}</span>
@@ -34,6 +35,7 @@
     </table>
     <div class="inline">
       <button type="submit">Save marks</button>
+      <button class="button secondary" type="button" id="mark-all-present">Mark all present</button>
       <a class="button secondary" href="/checks">Back to checks</a>
     </div>
   </form>
@@ -41,4 +43,14 @@
     <button class="button danger" type="submit">Delete check</button>
   </form>
 </section>
+<script>
+  const markAllButton = document.getElementById("mark-all-present");
+  if (markAllButton) {
+    markAllButton.addEventListener("click", () => {
+      document.querySelectorAll('select[name^="mark_"]').forEach((select) => {
+        select.value = "present";
+      });
+    });
+  }
+</script>
 {% endblock %}

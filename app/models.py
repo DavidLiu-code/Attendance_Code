@@ -34,6 +34,7 @@ class Check(Base):
 
     id = Column(Integer, primary_key=True)
     timestamp = Column(DateTime, nullable=False)
+    created_by = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     marks = relationship("Mark", back_populates="check", cascade="all, delete-orphan")

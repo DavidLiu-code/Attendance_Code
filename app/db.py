@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -24,6 +24,11 @@ def init_db() -> None:
     import app.models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    with engine.begin() as conn:
+        columns = conn.execute(text("PRAGMA table_info(checks)")).fetchall()
+        column_names = {row[1] for row in columns}
+        if "created_by" not in column_names:
+            conn.execute(text("ALTER TABLE checks ADD COLUMN created_by TEXT"))
 
 
 def get_db():

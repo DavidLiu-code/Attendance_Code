@@ -36,9 +36,9 @@ The app listens on `127.0.0.1:8000`, intended for a host Nginx reverse proxy.
 
 The app seeds three admin accounts on first run:
 
-- `professor1` / `professor123`
-- `professor2` / `professor123`
-- `professor3` / `professor123`
+- `Liu` / `Liu123456`
+- `Wang` / `Wang123456`
+- `Chen` / `Chen123456`
 
 Only admins can create/edit checks and activate/deactivate people. Change passwords by editing the `users` table in the database.
 
@@ -77,6 +77,6 @@ Security groups should allow 443 (and 8080 if you expose it). Port 8000 stays in
 1. Add people on the People page (admin only).
 2. Create a check on the Checks page (timestamp optional).
 3. Open the check and mark everyone present/absent.
-4. Close a month under Monthly Ops to apply salary changes.
+4. Close a month under Monthly Ops to apply salary changes (it recomputes earlier months up to that point).
 5. View a person's salary history and export CSV (salary history + attendance).
 6. If you edit past checks or marks, use Recalculate All.

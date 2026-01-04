@@ -35,4 +35,32 @@
     <a class="button secondary" href="/">Back to people</a>
   </div>
 </section>
+
+<section class="card">
+  <h2>Attendance details</h2>
+  {% if attendance_rows %}
+  <table>
+    <thead>
+      <tr>
+        <th>Check</th>
+        <th>Timestamp</th>
+        <th>Created by</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in attendance_rows %}
+      <tr>
+        <td>{{ row.check.id }}</td>
+        <td>{{ row.check.timestamp.strftime("%Y-%m-%d %H:%M") }}</td>
+        <td>{{ row.check.created_by or "Unknown" }}</td>
+        <td>{{ row.status }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="muted">No checks yet.</p>
+  {% endif %}
+</section>
 {% endblock %}

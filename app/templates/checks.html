@@ -41,6 +41,7 @@
     <thead>
       <tr>
         <th>Timestamp</th>
+        <th>Created by</th>
         <th>Present</th>
         <th>Absent</th>
         <th>Unmarked</th>
@@ -51,6 +52,7 @@
     {% for row in checks %}
       <tr>
         <td>{{ row.check.timestamp.strftime("%Y-%m-%d %H:%M") }}</td>
+        <td>{{ row.check.created_by or "Unknown" }}</td>
         <td class="count">{{ row.present }}</td>
         <td class="count">{{ row.absent }}</td>
         <td class="count">{{ row.unmarked }}</td>

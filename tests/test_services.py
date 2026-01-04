@@ -72,27 +72,36 @@ def test_missing_mark_not_perfect(db):
 
 
 def test_salary_cap_at_600(db):
-    person = Person(name="Cap", current_salary=SALARY_CAP)
+    person = Person(name="Cap", current_salary=START_SALARY)
     db.add(person)
     db.commit()
 
-    check_one = Check(timestamp=datetime(2024, 3, 1, 9, 0))
-    db.add(check_one)
+    checks = []
+    for month in range(1, 13):
+        checks.append(Check(timestamp=datetime(2024, month, 1, 9, 0)))
+    db.add_all(checks)
     db.commit()
 
-    db.add(Mark(check_id=check_one.id, person_id=person.id, status="present"))
+    db.add_all(
+        [
+            Mark(check_id=check.id, person_id=person.id, status="present")
+            for check in checks
+        ]
+    )
     db.commit()
 
-    close_month(db, "2024-03")
+    close_month(db, "2024-12")
     db.refresh(person)
 
     history = (
         db.query(SalaryHistory)
-        .filter(SalaryHistory.person_id == person.id, SalaryHistory.month == "2024-03")
+        .filter(SalaryHistory.person_id == person.id, SalaryHistory.month == "2024-12")
         .one()
     )
-    assert person.current_salary == SALARY_CAP
+    assert history.salary_before == SALARY_CAP
     assert history.delta == 0
+    assert history.salary_after == SALARY_CAP
+    assert person.current_salary == SALARY_CAP
 
 
 def test_multi_month_recalc_correctness(db):

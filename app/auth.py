@@ -12,10 +12,12 @@ from .models import User
 PBKDF2_ITERATIONS = 200_000
 
 DEFAULT_ADMIN_USERS: Iterable[tuple[str, str]] = (
-    ("professor1", "professor123"),
-    ("professor2", "professor123"),
-    ("professor3", "professor123"),
+    ("Liu", "Liu123456"),
+    ("Wang", "Wang123456"),
+    ("Chen", "Chen123456"),
 )
+
+OLD_ADMIN_USERNAMES = {"professor1", "professor2", "professor3"}
 
 
 def hash_password(password: str, salt: str | None = None) -> str:
@@ -39,6 +41,27 @@ def verify_password(password: str, stored_hash: str) -> bool:
 
 
 def seed_admin_users(db: Session) -> list[str]:
+    referenced_old = (
+        db.query(User)
+        .filter(User.username.in_(OLD_ADMIN_USERNAMES))
+        .first()
+        is not None
+    )
+    if referenced_old:
+        from .models import Check
+
+        used_in_checks = (
+            db.query(Check)
+            .filter(Check.created_by.in_(OLD_ADMIN_USERNAMES))
+            .first()
+            is not None
+        )
+        if not used_in_checks:
+            db.query(User).filter(User.username.in_(OLD_ADMIN_USERNAMES)).delete(
+                synchronize_session=False
+            )
+            db.commit()
+
     created = []
     for username, password in DEFAULT_ADMIN_USERS:
         existing = db.query(User).filter(User.username == username).first()

@@ -15,7 +15,7 @@
   {% if preview %}
     <p class="muted">Checks in month: {{ preview.checks_count }}</p>
     {% if already_closed %}
-      <div class="notice warn">This month is already closed.</div>
+      <div class="notice warn">This month already has history. Closing will recompute up to this month.</div>
     {% endif %}
     {% if not preview.has_checks %}
       <div class="notice warn">No checks found in this month.</div>
@@ -35,14 +35,14 @@
         <tr>
           <td>{{ row.person.name }}</td>
           <td>{{ "Yes" if row.perfect else "No" }}</td>
-          <td>{{ row.person.current_salary }}</td>
+          <td>{{ row.before }}</td>
           <td>{{ row.delta }}</td>
           <td>{{ row.after }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
-    {% if preview.has_checks and not already_closed %}
+    {% if preview.has_checks %}
     <form method="post" action="/months/close" onsubmit="return confirm('Close month {{ month }} and apply salary changes?');">
       <input type="hidden" name="month" value="{{ month }}">
       <button class="button danger" type="submit">Close month</button>
