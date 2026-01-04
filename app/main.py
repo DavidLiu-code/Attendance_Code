@@ -136,12 +136,50 @@ def home(
     error: str | None = None,
 ):
     people = db.query(Person).order_by(Person.name).all()
+    total_checks = db.query(func.count(Check.id)).scalar() or 0
+    last_check = db.query(Check).order_by(Check.timestamp.desc()).first()
+    active_people_count = db.query(func.count(Person.id)).filter(Person.active.is_(True)).scalar() or 0
+    total_absences_active = (
+        db.query(func.count(Mark.id))
+        .join(Person, Mark.person_id == Person.id)
+        .filter(Person.active.is_(True), Mark.status == "absent")
+        .scalar()
+        or 0
+    )
+    avg_absences_active = (
+        total_absences_active / active_people_count if active_people_count else 0
+    )
+    absent_counts = dict(
+        db.query(Mark.person_id, func.count(Mark.id))
+        .filter(Mark.status == "absent")
+        .group_by(Mark.person_id)
+        .all()
+    )
+    marked_counts = dict(
+        db.query(Mark.person_id, func.count(Mark.id)).group_by(Mark.person_id).all()
+    )
+    people_cards = []
+    for person in people:
+        absent_count = absent_counts.get(person.id, 0)
+        marked_count = marked_counts.get(person.id, 0)
+        if total_checks:
+            absence_rate = f"{(absent_count / total_checks) * 100:.1f}%"
+        else:
+            absence_rate = "N/A"
+        people_cards.append(
+            {
+                "person": person,
+                "absent_count": absent_count,
+                "absence_rate": absence_rate,
+                "missing_count": max(0, total_checks - marked_count),
+            }
+        )
     absent_rows = (
         db.query(Person.name.label("name"), func.count(Mark.id).label("count"))
         .join(Mark, Mark.person_id == Person.id)
         .filter(Person.active.is_(True), Mark.status == "absent")
         .group_by(Person.id)
-        .having(func.count(Mark.id) > 1)
+        .having(func.count(Mark.id) > 3)
         .order_by(func.count(Mark.id).desc())
         .all()
     )
@@ -158,8 +196,12 @@ def home(
         "home.html",
         {
             "request": request,
-            "people": people,
+            "people_cards": people_cards,
             "absent_stats": absent_stats,
+            "total_checks": total_checks,
+            "last_check": last_check,
+            "total_absences_active": total_absences_active,
+            "avg_absences_active": avg_absences_active,
             "start_salary": START_SALARY,
             "current_user": current_user,
             "msg": msg,
@@ -169,7 +211,15 @@ def home(
 
 
 @app.post("/people")
-def add_person(name: str = Form(...), db: Session = Depends(get_db)):
+def add_person(
+    request: Request,
+    name: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user),
+):
+    guard = require_admin(request, current_user)
+    if guard:
+        return guard
     clean_name = name.strip()
     if not clean_name:
         return redirect("/", error="Name is required.")
@@ -182,6 +232,28 @@ def add_person(name: str = Form(...), db: Session = Depends(get_db)):
     db.add(person)
     db.commit()
     return redirect("/", msg="Person added.")
+
+
+@app.post("/people/{person_id}/delete")
+def delete_person(
+    person_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user),
+):
+    guard = require_admin(request, current_user)
+    if guard:
+        return guard
+    person = db.get(Person, person_id)
+    if not person:
+        raise HTTPException(status_code=404, detail="Person not found")
+    db.query(Mark).filter(Mark.person_id == person_id).delete(synchronize_session=False)
+    db.query(SalaryHistory).filter(SalaryHistory.person_id == person_id).delete(
+        synchronize_session=False
+    )
+    db.delete(person)
+    db.commit()
+    return redirect("/", msg=f"{person.name} deleted.")
 
 
 @app.post("/people/{person_id}/toggle")

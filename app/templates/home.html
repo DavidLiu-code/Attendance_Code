@@ -2,15 +2,35 @@
 {% block content %}
 <div class="grid">
   <section class="card stack">
-    <h2>Add person</h2>
-    <form method="post" action="/people" class="stack">
+    <h2>Check stats</h2>
+    <div class="stack">
       <div>
-        <label for="name">Name</label>
-        <input id="name" name="name" placeholder="Jane Doe" required>
+        <p class="muted">Last check time</p>
+        {% if last_check %}
+          <div class="count">{{ last_check.timestamp.strftime("%Y-%m-%d %H:%M") }}</div>
+        {% else %}
+          <p class="muted">No checks yet.</p>
+        {% endif %}
       </div>
-      <button type="submit">Add person</button>
-    </form>
-    <p class="muted">Starting salary is {{ start_salary }}.</p>
+      <div>
+        <p class="muted">Total checks</p>
+        <div class="count">{{ total_checks }}</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card stack">
+    <h2>Absence stats</h2>
+    <div class="stack">
+      <div>
+        <p class="muted">Total absences (active)</p>
+        <div class="count">{{ total_absences_active }}</div>
+      </div>
+      <div>
+        <p class="muted">Avg absences / active person</p>
+        <div class="count">{{ "%.1f"|format(avg_absences_active) }}</div>
+      </div>
+    </div>
   </section>
 
   <section class="card stack">
@@ -27,56 +47,81 @@
         </div>
         {% endfor %}
       </div>
-      <p class="muted">Showing active people with more than 1 absence.</p>
+      <p class="muted">Showing active people with more than 3 absences.</p>
     {% else %}
-      <p class="muted">No active people with more than 1 absence.</p>
+      <p class="muted">No active people with more than 3 absences.</p>
     {% endif %}
   </section>
 </div>
 
-<section class="card">
-  <h2>People</h2>
-  {% if people %}
-  <table>
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>Salary</th>
-        <th>Status</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-    {% for person in people %}
-      <tr>
-        <td><a href="/people/{{ person.id }}">{{ person.name }}</a></td>
-        <td>{{ person.current_salary }}</td>
-        <td>
-          {% if person.active %}
-            <span class="pill active">Active</span>
-          {% else %}
-            <span class="pill inactive">Inactive</span>
-          {% endif %}
-        </td>
-        <td>
-          {% if current_user and current_user.role == "admin" %}
-            <form method="post" action="/people/{{ person.id }}/toggle">
-              {% if person.active %}
+<section class="stack">
+  <div class="inline">
+    <h2>People</h2>
+    <span class="muted">Absence rate = absences / total checks ({{ total_checks }}).</span>
+  </div>
+  <div class="grid">
+    {% if current_user and current_user.role == "admin" %}
+      <article class="card stack">
+        <h3>Add person</h3>
+        <form method="post" action="/people" class="stack">
+          <div>
+            <label for="name">Name</label>
+            <input id="name" name="name" placeholder="Jane Doe" required>
+          </div>
+          <button type="submit">Add person</button>
+        </form>
+        <p class="muted">Starting salary is {{ start_salary }}.</p>
+      </article>
+    {% endif %}
+
+    {% if people_cards %}
+      {% for row in people_cards %}
+      <article class="card stack">
+        <div class="inline">
+          <div>
+            <h3><a href="/people/{{ row.person.id }}">{{ row.person.name }}</a></h3>
+            <p class="muted">Salary: {{ row.person.current_salary }}</p>
+          </div>
+          <div>
+            {% if row.person.active %}
+              <span class="pill active">Active</span>
+            {% else %}
+              <span class="pill inactive">Inactive</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="inline">
+          <div>
+            <p class="muted">Absences</p>
+            <div class="count">{{ row.absent_count }}</div>
+          </div>
+          <div>
+            <p class="muted">Absence rate</p>
+            <div class="count">{{ row.absence_rate }}</div>
+          </div>
+        </div>
+        <p class="muted">Missing marks: {{ row.missing_count }}</p>
+        {% if current_user and current_user.role == "admin" %}
+          <div class="inline">
+            <form method="post" action="/people/{{ row.person.id }}/toggle">
+              {% if row.person.active %}
                 <button class="button secondary" type="submit">Deactivate</button>
               {% else %}
                 <button type="submit">Activate</button>
               {% endif %}
             </form>
-          {% else %}
-            <span class="muted">Admin only</span>
-          {% endif %}
-        </td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-    <p class="muted">No people yet. Add your first person.</p>
-  {% endif %}
+            <form method="post" action="/people/{{ row.person.id }}/delete" onsubmit="return confirm('Delete {{ row.person.name }}? This will remove marks and salary history.');">
+              <button class="button danger" type="submit">Delete</button>
+            </form>
+          </div>
+        {% else %}
+          <p class="muted">Admin only for changes.</p>
+        {% endif %}
+      </article>
+      {% endfor %}
+    {% else %}
+      <p class="muted">No people yet. Add your first person.</p>
+    {% endif %}
+  </div>
 </section>
 {% endblock %}
