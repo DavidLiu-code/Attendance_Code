@@ -397,6 +397,40 @@ def person_history(
         .order_by(SalaryHistory.month)
         .all()
     )
+    if not history:
+        from .services import (
+            apply_month_change,
+            collect_marks_for_checks,
+            get_checks_for_month,
+            is_perfect_month,
+            list_months_with_checks,
+        )
+
+        months = list_months_with_checks(db)
+        if months:
+            computed_at = now_local()
+            current_salary = START_SALARY
+            computed_history = []
+            for month in months:
+                checks = get_checks_for_month(db, month)
+                marks_by_check = collect_marks_for_checks(
+                    db, [check.id for check in checks]
+                )
+                perfect = is_perfect_month(checks, marks_by_check, person.id)
+                delta, salary_after, reason = apply_month_change(current_salary, perfect)
+                computed_history.append(
+                    SalaryHistory(
+                        person_id=person.id,
+                        month=month,
+                        salary_before=current_salary,
+                        delta=delta,
+                        salary_after=salary_after,
+                        reason=reason,
+                        computed_at=computed_at,
+                    )
+                )
+                current_salary = salary_after
+            history = computed_history
     checks = db.query(Check).order_by(Check.timestamp.desc()).all()
     marks = db.query(Mark).filter(Mark.person_id == person_id).all()
     mark_map = {mark.check_id: mark.status for mark in marks}
@@ -406,10 +440,6 @@ def person_history(
     ]
     attendance_total = len(attendance_rows)
     attendance_min_height = (attendance_total + 1) * 44 if attendance_total else 0
-    if status:
-        attendance_rows = [
-            row for row in attendance_rows if row["status"] == status
-        ]
     return templates.TemplateResponse(
         "person_history.html",
         {

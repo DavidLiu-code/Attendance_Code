@@ -38,15 +38,13 @@
 
 <section class="card">
   <h2>Attendance details</h2>
-  {% if filter_status %}
-    <p class="muted">
-      Filtered: {{ filter_status }}
-      <a class="status-link" href="/people/{{ person.id }}">(clear)</a>
-    </p>
-  {% endif %}
+  <p class="muted" id="attendance-filter"{% if not filter_status %} style="display:none;"{% endif %}>
+    Filtered: <span id="attendance-filter-label">{{ filter_status or "" }}</span>
+    <a class="status-link" id="attendance-filter-clear" href="/people/{{ person.id }}">(clear)</a>
+  </p>
   {% if attendance_rows %}
   <div class="attendance-table-wrap"{% if attendance_min_height %} style="min-height: {{ attendance_min_height }}px;"{% endif %}>
-  <table class="attendance-table">
+  <table class="attendance-table" id="attendance-table">
     <thead>
       <tr>
         <th>Check</th>
@@ -57,13 +55,14 @@
     </thead>
     <tbody>
       {% for row in attendance_rows %}
-      <tr>
+      <tr class="attendance-row{% if filter_status and row.status != filter_status %} row-hidden{% endif %}" data-status="{{ row.status }}">
         <td>
-          {% set check_href = "/checks/" ~ row.check.id ~ "?origin=people&person_id=" ~ person.id %}
+          {% set check_base = "/checks/" ~ row.check.id ~ "?origin=people&person_id=" ~ person.id %}
+          {% set check_href = check_base %}
           {% if filter_status %}
             {% set check_href = check_href ~ "&status=" ~ filter_status %}
           {% endif %}
-          <a href="{{ check_href }}">{{ row.check.id }}</a>
+          <a class="check-link" data-check-base="{{ check_base }}" href="{{ check_href }}">{{ row.check.id }}</a>
         </td>
         <td>{{ row.check.timestamp.strftime("%Y-%m-%d %H:%M") }}</td>
         <td>{{ row.check.created_by or "Unknown" }}</td>
@@ -75,15 +74,15 @@
             {% set toggle_href = "/people/" ~ person.id ~ "?status=" ~ toggle_target %}
           {% endif %}
           {% if row.status == "present" %}
-            <a class="status-link" href="{{ toggle_href }}">
+            <a class="status-link" data-status-filter="present" href="{{ toggle_href }}">
               <span class="status status-present status-badge">present</span>
             </a>
           {% elif row.status == "absent" %}
-            <a class="status-link" href="{{ toggle_href }}">
+            <a class="status-link" data-status-filter="absent" href="{{ toggle_href }}">
               <span class="status status-absent status-badge">absent</span>
             </a>
           {% else %}
-            <a class="status-link" href="{{ toggle_href }}">
+            <a class="status-link" data-status-filter="unmarked" href="{{ toggle_href }}">
               <span class="status status-unmarked status-badge">unmarked</span>
             </a>
           {% endif %}
@@ -97,4 +96,60 @@
     <p class="muted">No checks yet.</p>
   {% endif %}
 </section>
+<script>
+  (function () {
+    const rows = document.querySelectorAll(".attendance-row");
+    const filterWrap = document.getElementById("attendance-filter");
+    const filterLabel = document.getElementById("attendance-filter-label");
+    const clearLink = document.getElementById("attendance-filter-clear");
+    if (!rows.length || !filterWrap || !filterLabel || !clearLink) {
+      return;
+    }
+    let currentFilter = "{{ filter_status or '' }}";
+    const personId = "{{ person.id }}";
+
+    const applyFilter = (status) => {
+      currentFilter = status || "";
+      rows.forEach((row) => {
+        const rowStatus = row.dataset.status;
+        const hideRow = currentFilter && rowStatus !== currentFilter;
+        row.classList.toggle("row-hidden", hideRow);
+      });
+      document.querySelectorAll(".check-link").forEach((link) => {
+        const base = link.dataset.checkBase;
+        if (!base) {
+          return;
+        }
+        link.href = currentFilter ? `${base}&status=${currentFilter}` : base;
+      });
+      if (currentFilter) {
+        filterWrap.style.display = "";
+        filterLabel.textContent = currentFilter;
+        clearLink.href = `/people/${personId}`;
+      } else {
+        filterWrap.style.display = "none";
+        filterLabel.textContent = "";
+      }
+    };
+
+    clearLink.addEventListener("click", (event) => {
+      event.preventDefault();
+      applyFilter("");
+    });
+
+    document.querySelectorAll(".status-link[data-status-filter]").forEach((link) => {
+      link.addEventListener("click", (event) => {
+        const status = link.dataset.statusFilter;
+        if (!status) {
+          return;
+        }
+        event.preventDefault();
+        const next = currentFilter === status ? "" : status;
+        applyFilter(next);
+      });
+    });
+
+    applyFilter(currentFilter);
+  })();
+</script>
 {% endblock %}
