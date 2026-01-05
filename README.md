@@ -1,4 +1,4 @@
-# Attendance + Salary Tracking
+# AttendanceHub
 
 Small FastAPI app for attendance checks and monthly salary adjustments.
 

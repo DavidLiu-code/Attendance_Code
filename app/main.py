@@ -23,7 +23,7 @@ from .services import (
     recalculate_all,
 )
 
-app = FastAPI(title="Attendance + Salary")
+app = FastAPI(title="AttendanceHub")
 app.add_middleware(
     SessionMiddleware,
     secret_key=os.getenv("APP_SECRET_KEY", "change-me"),
