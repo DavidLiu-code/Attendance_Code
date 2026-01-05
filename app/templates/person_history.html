@@ -57,7 +57,7 @@
     <tbody>
       {% for row in attendance_rows %}
       <tr>
-        <td>{{ row.check.id }}</td>
+        <td><a href="/checks/{{ row.check.id }}">{{ row.check.id }}</a></td>
         <td>{{ row.check.timestamp.strftime("%Y-%m-%d %H:%M") }}</td>
         <td>{{ row.check.created_by or "Unknown" }}</td>
         <td>
