@@ -3,7 +3,7 @@ import math
 import os
 from urllib.parse import urlencode
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Request
+from fastapi import Body, Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 from .auth import get_current_user, login_user, logout_user, seed_admin_users, verify_password
-from .chat import answer_question
+from .chat_service import handle_chat_request
 from .db import SessionLocal, get_db, init_db
 from .models import Check, Mark, Person, SalaryHistory, User
 from .services import (
@@ -239,6 +239,7 @@ def chat_page(
     msg: str | None = None,
     error: str | None = None,
 ):
+    session_id = request.session.get("chat_session_id")
     return templates.TemplateResponse(
         "chat.html",
         {
@@ -247,6 +248,8 @@ def chat_page(
             "answer": None,
             "details": None,
             "clarifying_question": None,
+            "data_preview": None,
+            "session_id": session_id,
             "current_user": current_user,
             "msg": msg,
             "error": error,
@@ -261,20 +264,55 @@ def chat_action(
     db: Session = Depends(get_db),
     current_user: User | None = Depends(get_current_user),
 ):
-    result = answer_question(db, question)
+    payload = {
+        "session_id": request.session.get("chat_session_id"),
+        "user_id": current_user.username if current_user else "visitor",
+        "role": current_user.role if current_user else "user",
+        "message": question,
+        "stream": False,
+    }
+    result = handle_chat_request(db, payload)
+    if "error" in result:
+        return templates.TemplateResponse(
+            "chat.html",
+            {
+                "request": request,
+                "question": question,
+                "answer": None,
+                "details": None,
+                "clarifying_question": None,
+                "data_preview": None,
+                "session_id": request.session.get("chat_session_id"),
+                "current_user": current_user,
+                "msg": None,
+                "error": result["error"],
+            },
+        )
+    if "session_id" in result:
+        request.session["chat_session_id"] = result["session_id"]
     return templates.TemplateResponse(
         "chat.html",
         {
             "request": request,
             "question": question,
             "answer": result.get("answer"),
-            "details": result.get("details"),
-            "clarifying_question": result.get("clarifying_question"),
+            "details": result.get("assumptions"),
+            "clarifying_question": None,
+            "data_preview": result.get("data_preview"),
+            "session_id": result.get("session_id"),
             "current_user": current_user,
             "msg": None,
             "error": None,
         },
     )
+
+
+@app.post("/api/chat")
+def api_chat(payload: dict = Body(...), db: Session = Depends(get_db)):
+    result = handle_chat_request(db, payload)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
 
 
 @app.get("/", response_class=HTMLResponse)

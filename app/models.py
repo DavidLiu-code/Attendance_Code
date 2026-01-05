@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from .db import Base
@@ -74,4 +74,59 @@ class SalaryHistory(Base):
 
     __table_args__ = (
         UniqueConstraint("person_id", "month", name="uq_salary_person_month"),
+    )
+
+
+class ChatSession(Base):
+    __tablename__ = "chat_sessions"
+
+    session_id = Column(String, primary_key=True)
+    user_id = Column(String, nullable=False)
+    role = Column(String, nullable=False)
+    default_model_key = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id = Column(Integer, primary_key=True)
+    session_id = Column(String, ForeignKey("chat_sessions.session_id", ondelete="CASCADE"), nullable=False)
+    role = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    token_estimate = Column(Integer, default=0, nullable=False)
+    meta_json = Column(Text, nullable=True)
+
+
+class ChatSummary(Base):
+    __tablename__ = "chat_summaries"
+
+    session_id = Column(String, ForeignKey("chat_sessions.session_id", ondelete="CASCADE"), primary_key=True)
+    summary_text = Column(Text, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    version = Column(Integer, default=1, nullable=False)
+
+
+class ChatEmbedding(Base):
+    __tablename__ = "chat_embeddings"
+
+    id = Column(Integer, primary_key=True)
+    message_id = Column(Integer, ForeignKey("chat_messages.id", ondelete="CASCADE"), nullable=False)
+    content = Column(Text, nullable=False)
+    tokens_json = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class ChatUserScope(Base):
+    __tablename__ = "chat_user_scopes"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(String, nullable=False)
+    person_id = Column(Integer, ForeignKey("people.id", ondelete="CASCADE"), nullable=False)
+    can_view_salary = Column(Boolean, default=False, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "person_id", name="uq_chat_user_scope"),
     )

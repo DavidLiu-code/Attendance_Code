@@ -18,20 +18,38 @@
 <section class="card stack">
   <h3>Answer</h3>
   <p>{{ answer }}</p>
-  {% if clarifying_question %}
-    <p class="muted">{{ clarifying_question }}</p>
-  {% endif %}
   {% if details %}
-  <table>
-    <tbody>
-      {% for row in details %}
-      <tr>
-        <td class="muted">{{ row.label }}</td>
-        <td>{{ row.value }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+    <div class="stack">
+      <p class="muted">Assumptions</p>
+      <ul>
+        {% for item in details %}
+          <li>{{ item }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+  {% if data_preview %}
+    <div class="stack">
+      <p class="muted">Data preview</p>
+      <table>
+        <thead>
+          <tr>
+            {% for key in data_preview[0].keys() %}
+              <th>{{ key }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in data_preview %}
+            <tr>
+              {% for value in row.values() %}
+                <td>{{ value }}</td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   {% endif %}
 </section>
 {% endif %}

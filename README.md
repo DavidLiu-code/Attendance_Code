@@ -31,9 +31,16 @@ The app listens on `127.0.0.1:8000`, intended for a host Nginx reverse proxy.
 
 - `APP_TIMEZONE`: defaults to `Asia/Shanghai` (Beijing time).
 - `APP_SECRET_KEY`: session secret for admin login (set this in production).
-- `MODELSCOPE_API_KEY`: API key for the ModelScope OpenAI-compatible endpoint (Chat feature).
-- `MODELSCOPE_MODEL`: model name for Chat (default `Qwen2.5-7B-Instruct`).
-- `MODELSCOPE_BASE_URL`: override the API base URL (default `https://api-inference.modelscope.cn/v1`).
+- `MODELSCOPE_API_KEY`: API key for ModelScope (Chat feature).
+- `MODELSCOPE_BASE_URL`: API base URL (default `https://api-inference.modelscope.cn/v1`).
+- `MODEL_CATALOG_JSON`: optional JSON mapping of model keys to model names.
+- `DEFAULT_MODEL_KEY`: default model key if none specified (default `balanced`).
+- `DEBUG_CHAT`: set `true` to include SQL in `/api/chat` debug output.
+- `CHAT_RECENT_LIMIT`: number of recent messages included in Chat context (default 16).
+- `CHAT_SUMMARY_THRESHOLD_MESSAGES`: summarize when message count exceeds this (default 40).
+- `CHAT_SUMMARY_THRESHOLD_TOKENS`: summarize when token estimate exceeds this (default 6000).
+- `ENABLE_CHAT_RETRIEVAL`: set `true` to enable lightweight retrieval memory.
+- `CHAT_RETRIEVAL_K`: number of retrieved memories to include (default 5).
 
 ## Admin accounts
 
@@ -44,6 +51,8 @@ The app seeds three admin accounts on first run:
 - `Chen` / `Chen123456`
 
 Only admins can create/edit checks and activate/deactivate people. Change passwords by editing the `users` table in the database.
+
+For Chat access control, you can map managers to people in the `chat_user_scopes` table (columns: `user_id`, `person_id`, `can_view_salary`).
 
 ## Nginx (host reverse proxy)
 
@@ -84,3 +93,51 @@ Security groups should allow 443 (and 8080 if you expose it). Port 8000 stays in
 5. Use Chat to ask attendance questions (requires ModelScope API key).
 6. View a person's salary history and export CSV (salary history + attendance).
 7. If you edit past checks or marks, use Recalculate All.
+
+## Chat API
+
+`POST /api/chat`
+
+Model catalog example (`MODEL_CATALOG_JSON`):
+
+```json
+{
+  "fast": "Qwen/YourFastInstructModel",
+  "balanced": "Qwen/YourBalancedInstructModel",
+  "long": "Qwen/YourLongContextInstructModel",
+  "summarizer": "Qwen/YourCheaperModelForSummaries"
+}
+```
+
+Example request:
+
+```json
+{
+  "session_id": "",
+  "user_id": "alice",
+  "role": "user",
+  "model_key": "balanced",
+  "message": "Show Alice's attendance summary for 2025-12.",
+  "stream": false
+}
+```
+
+Example response shape:
+
+```json
+{
+  "session_id": "uuid",
+  "model_used": "Qwen/YourBalancedInstructModel",
+  "answer": "string",
+  "data_preview": [],
+  "assumptions": [],
+  "confidence": "high",
+  "debug": {
+    "tokens_estimate": {
+      "history_tokens": 0,
+      "summary_tokens": 0,
+      "prompt_tokens": 0
+    }
+  }
+}
+```
