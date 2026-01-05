@@ -404,6 +404,8 @@ def person_history(
         {"check": check, "status": mark_map.get(check.id, "unmarked")}
         for check in checks
     ]
+    attendance_total = len(attendance_rows)
+    attendance_min_height = (attendance_total + 1) * 44 if attendance_total else 0
     if status:
         attendance_rows = [
             row for row in attendance_rows if row["status"] == status
@@ -415,6 +417,7 @@ def person_history(
             "person": person,
             "history": history,
             "attendance_rows": attendance_rows,
+            "attendance_min_height": attendance_min_height,
             "filter_status": status,
             "current_user": current_user,
             "msg": msg,

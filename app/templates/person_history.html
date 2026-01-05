@@ -45,7 +45,8 @@
     </p>
   {% endif %}
   {% if attendance_rows %}
-  <table>
+  <div class="attendance-table-wrap"{% if attendance_min_height %} style="min-height: {{ attendance_min_height }}px;"{% endif %}>
+  <table class="attendance-table">
     <thead>
       <tr>
         <th>Check</th>
@@ -91,6 +92,7 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
   {% else %}
     <p class="muted">No checks yet.</p>
   {% endif %}
