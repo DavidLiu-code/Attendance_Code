@@ -535,6 +535,9 @@ def check_detail(
     check_id: int,
     db: Session = Depends(get_db),
     current_user: User | None = Depends(get_current_user),
+    origin: str | None = None,
+    person_id: int | None = None,
+    status: str | None = None,
     msg: str | None = None,
     error: str | None = None,
 ):
@@ -554,6 +557,11 @@ def check_detail(
     )
     mark_map = {mark.person_id: mark.status for mark in marks}
     unmarked_count = max(0, len(people) - len(marks))
+    back_to_people_url = None
+    if origin == "people" and person_id:
+        back_to_people_url = f"/people/{person_id}"
+        if status in ("present", "absent", "unmarked"):
+            back_to_people_url = f"{back_to_people_url}?status={status}"
 
     return templates.TemplateResponse(
         "check_detail.html",
@@ -563,6 +571,7 @@ def check_detail(
             "people": people,
             "marks": mark_map,
             "unmarked_count": unmarked_count,
+            "back_to_people_url": back_to_people_url,
             "current_user": current_user,
             "msg": msg,
             "error": error,

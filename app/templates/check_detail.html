@@ -36,6 +36,9 @@
     <div class="inline">
       <button type="submit">Save marks</button>
       <button class="button secondary" type="button" id="mark-all-present">Mark all present</button>
+      {% if back_to_people_url %}
+        <a class="button secondary" href="{{ back_to_people_url }}">Back to people</a>
+      {% endif %}
       <a class="button secondary" href="/checks">Back to checks</a>
     </div>
   </form>

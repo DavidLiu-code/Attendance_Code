@@ -57,7 +57,13 @@
     <tbody>
       {% for row in attendance_rows %}
       <tr>
-        <td><a href="/checks/{{ row.check.id }}">{{ row.check.id }}</a></td>
+        <td>
+          {% set check_href = "/checks/" ~ row.check.id ~ "?origin=people&person_id=" ~ person.id %}
+          {% if filter_status %}
+            {% set check_href = check_href ~ "&status=" ~ filter_status %}
+          {% endif %}
+          <a href="{{ check_href }}">{{ row.check.id }}</a>
+        </td>
         <td>{{ row.check.timestamp.strftime("%Y-%m-%d %H:%M") }}</td>
         <td>{{ row.check.created_by or "Unknown" }}</td>
         <td>
