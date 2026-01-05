@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 from .auth import get_current_user, login_user, logout_user, seed_admin_users, verify_password
+from .chat import answer_question
 from .db import SessionLocal, get_db, init_db
 from .models import Check, Mark, Person, SalaryHistory, User
 from .services import (
@@ -227,6 +228,51 @@ def export_page(
             "current_user": current_user,
             "msg": msg,
             "error": error,
+        },
+    )
+
+
+@app.get("/chat", response_class=HTMLResponse)
+def chat_page(
+    request: Request,
+    current_user: User | None = Depends(get_current_user),
+    msg: str | None = None,
+    error: str | None = None,
+):
+    return templates.TemplateResponse(
+        "chat.html",
+        {
+            "request": request,
+            "question": "",
+            "answer": None,
+            "details": None,
+            "clarifying_question": None,
+            "current_user": current_user,
+            "msg": msg,
+            "error": error,
+        },
+    )
+
+
+@app.post("/chat", response_class=HTMLResponse)
+def chat_action(
+    request: Request,
+    question: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user),
+):
+    result = answer_question(db, question)
+    return templates.TemplateResponse(
+        "chat.html",
+        {
+            "request": request,
+            "question": question,
+            "answer": result.get("answer"),
+            "details": result.get("details"),
+            "clarifying_question": result.get("clarifying_question"),
+            "current_user": current_user,
+            "msg": None,
+            "error": None,
         },
     )
 

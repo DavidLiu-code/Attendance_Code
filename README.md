@@ -31,6 +31,9 @@ The app listens on `127.0.0.1:8000`, intended for a host Nginx reverse proxy.
 
 - `APP_TIMEZONE`: defaults to `Asia/Shanghai` (Beijing time).
 - `APP_SECRET_KEY`: session secret for admin login (set this in production).
+- `MODELSCOPE_API_KEY`: API key for the ModelScope OpenAI-compatible endpoint (Chat feature).
+- `MODELSCOPE_MODEL`: model name for Chat (default `Qwen2.5-7B-Instruct`).
+- `MODELSCOPE_BASE_URL`: override the API base URL (default `https://api-inference.modelscope.cn/v1`).
 
 ## Admin accounts
 
@@ -78,5 +81,6 @@ Security groups should allow 443 (and 8080 if you expose it). Port 8000 stays in
 2. Create a check on the Checks page (timestamp optional).
 3. Open the check and mark everyone present/absent.
 4. Close a month under Monthly Ops to apply salary changes (it recomputes earlier months up to that point).
-5. View a person's salary history and export CSV (salary history + attendance).
-6. If you edit past checks or marks, use Recalculate All.
+5. Use Chat to ask attendance questions (requires ModelScope API key).
+6. View a person's salary history and export CSV (salary history + attendance).
+7. If you edit past checks or marks, use Recalculate All.
