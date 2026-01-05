@@ -382,12 +382,15 @@ def person_history(
     person_id: int,
     db: Session = Depends(get_db),
     current_user: User | None = Depends(get_current_user),
+    status: str | None = None,
     msg: str | None = None,
     error: str | None = None,
 ):
     person = db.get(Person, person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
+    if status not in (None, "present", "absent", "unmarked"):
+        status = None
     history = (
         db.query(SalaryHistory)
         .filter(SalaryHistory.person_id == person_id)
@@ -401,6 +404,10 @@ def person_history(
         {"check": check, "status": mark_map.get(check.id, "unmarked")}
         for check in checks
     ]
+    if status:
+        attendance_rows = [
+            row for row in attendance_rows if row["status"] == status
+        ]
     return templates.TemplateResponse(
         "person_history.html",
         {
@@ -408,6 +415,7 @@ def person_history(
             "person": person,
             "history": history,
             "attendance_rows": attendance_rows,
+            "filter_status": status,
             "current_user": current_user,
             "msg": msg,
             "error": error,

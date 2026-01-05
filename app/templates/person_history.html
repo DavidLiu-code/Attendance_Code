@@ -38,6 +38,12 @@
 
 <section class="card">
   <h2>Attendance details</h2>
+  {% if filter_status %}
+    <p class="muted">
+      Filtered: {{ filter_status }}
+      <a class="status-link" href="/people/{{ person.id }}">(clear)</a>
+    </p>
+  {% endif %}
   {% if attendance_rows %}
   <table>
     <thead>
@@ -55,12 +61,24 @@
         <td>{{ row.check.timestamp.strftime("%Y-%m-%d %H:%M") }}</td>
         <td>{{ row.check.created_by or "Unknown" }}</td>
         <td>
-          {% if row.status == "present" %}
-            <span class="status status-present">present</span>
-          {% elif row.status == "absent" %}
-            <span class="status status-absent">absent</span>
+          {% set toggle_target = row.status %}
+          {% if filter_status == toggle_target %}
+            {% set toggle_href = "/people/" ~ person.id %}
           {% else %}
-            <span class="status status-unmarked">unmarked</span>
+            {% set toggle_href = "/people/" ~ person.id ~ "?status=" ~ toggle_target %}
+          {% endif %}
+          {% if row.status == "present" %}
+            <a class="status-link" href="{{ toggle_href }}">
+              <span class="status status-present status-badge">present</span>
+            </a>
+          {% elif row.status == "absent" %}
+            <a class="status-link" href="{{ toggle_href }}">
+              <span class="status status-absent status-badge">absent</span>
+            </a>
+          {% else %}
+            <a class="status-link" href="{{ toggle_href }}">
+              <span class="status status-unmarked status-badge">unmarked</span>
+            </a>
           {% endif %}
         </td>
       </tr>

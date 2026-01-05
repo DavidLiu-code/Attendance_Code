@@ -42,6 +42,9 @@
       a:hover {
         text-decoration: underline;
       }
+      .status-link:hover {
+        text-decoration: none;
+      }
       .nav {
         display: flex;
         flex-wrap: wrap;
@@ -200,14 +203,23 @@
         font-weight: 600;
         text-transform: capitalize;
       }
+      .status-badge {
+        display: inline-block;
+        padding: 0.2rem 0.6rem;
+        border-radius: 999px;
+        background: #eef2f1;
+      }
       .status-present {
         color: #2E7D32;
+        background: #e8f5e9;
       }
       .status-absent {
         color: #C62828;
+        background: #fbe9e7;
       }
       .status-unmarked {
         color: #9E9E9E;
+        background: #f1f1f1;
       }
       .chart {
         display: grid;
