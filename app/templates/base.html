@@ -257,6 +257,34 @@
         height: 44px;
         vertical-align: middle;
       }
+      .attendance-table {
+        table-layout: fixed;
+      }
+      .attendance-table-wrap {
+        overflow-x: auto;
+      }
+      .attendance-table th,
+      .attendance-table td {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .attendance-table th:nth-child(1),
+      .attendance-table td:nth-child(1) {
+        width: 70px;
+      }
+      .attendance-table th:nth-child(2),
+      .attendance-table td:nth-child(2) {
+        width: 170px;
+      }
+      .attendance-table th:nth-child(3),
+      .attendance-table td:nth-child(3) {
+        width: 140px;
+      }
+      .attendance-table th:nth-child(4),
+      .attendance-table td:nth-child(4) {
+        width: 120px;
+      }
       .row-hidden {
         display: none;
       }
