@@ -46,8 +46,14 @@
     <span class="muted">Time window:</span>
     <button class="button" type="button" data-time-filter="core" aria-pressed="true">Core hours (required)</button>
     <button class="button secondary" type="button" data-time-filter="flex" aria-pressed="false">Flex hours</button>
+    <button class="button secondary" type="button" data-time-filter="all" aria-pressed="false">All hours</button>
   </div>
-  <p class="muted">Core hours: 09:00-11:00 and 14:30-17:00. Flex hours cover all other times.</p>
+  <div class="inline" id="attendance-absence-rate">
+    <span class="muted">Absence rate (current view):</span>
+    <span class="count" id="attendance-absence-rate-value">N/A</span>
+    <span class="muted" id="attendance-absence-rate-detail"></span>
+  </div>
+  <p class="muted">Core hours: 09:00-11:00 and 14:30-17:00. Flex hours cover all other times. All hours shows everything.</p>
   {% if attendance_rows %}
   <div class="attendance-table-wrap"{% if attendance_min_height %} style="min-height: {{ attendance_min_height }}px;"{% endif %}>
   <table class="attendance-table" id="attendance-table">
@@ -113,12 +119,26 @@
     const filterLabel = document.getElementById("attendance-filter-label");
     const clearLink = document.getElementById("attendance-filter-clear");
     const timeButtons = document.querySelectorAll("[data-time-filter]");
+    const absenceRateValue = document.getElementById("attendance-absence-rate-value");
+    const absenceRateDetail = document.getElementById("attendance-absence-rate-detail");
     if (!rows.length || !filterWrap || !filterLabel || !clearLink || !timeButtons.length) {
       return;
     }
     let currentFilter = "{{ filter_status or '' }}";
     let currentTime = "core";
     const personId = "{{ person.id }}";
+
+    const isRowVisible = (row) => {
+      const rowStatus = row.dataset.status;
+      const rowTime = row.dataset.time;
+      if (currentFilter && rowStatus !== currentFilter) {
+        return false;
+      }
+      if (currentTime !== "all" && rowTime !== currentTime) {
+        return false;
+      }
+      return true;
+    };
 
     const updateTimeButtons = () => {
       timeButtons.forEach((button) => {
@@ -128,12 +148,39 @@
       });
     };
 
+    const updateAbsenceRate = () => {
+      if (!absenceRateValue) {
+        return;
+      }
+      let total = 0;
+      let absent = 0;
+      rows.forEach((row) => {
+        if (!isRowVisible(row)) {
+          return;
+        }
+        total += 1;
+        if (row.dataset.status === "absent") {
+          absent += 1;
+        }
+      });
+      if (!total) {
+        absenceRateValue.textContent = "N/A";
+        if (absenceRateDetail) {
+          absenceRateDetail.textContent = "";
+        }
+        return;
+      }
+      const rate = (absent / total) * 100;
+      absenceRateValue.textContent = `${rate.toFixed(1)}%`;
+      if (absenceRateDetail) {
+        absenceRateDetail.textContent = `(${absent}/${total})`;
+      }
+    };
+
     const applyFilter = (status) => {
       currentFilter = status || "";
       rows.forEach((row) => {
-        const rowStatus = row.dataset.status;
-        const rowTime = row.dataset.time;
-        const hideRow = (currentFilter && rowStatus !== currentFilter) || rowTime !== currentTime;
+        const hideRow = !isRowVisible(row);
         row.classList.toggle("row-hidden", hideRow);
       });
       document.querySelectorAll(".check-link").forEach((link) => {
@@ -152,6 +199,7 @@
         filterLabel.textContent = "";
       }
       updateTimeButtons();
+      updateAbsenceRate();
     };
 
     clearLink.addEventListener("click", (event) => {
