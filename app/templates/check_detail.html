@@ -27,6 +27,7 @@
               <option value="unmarked" {% if marks.get(person.id) is none %}selected{% endif %}>Unmarked</option>
               <option value="present" {% if marks.get(person.id) == "present" %}selected{% endif %}>Present</option>
               <option value="absent" {% if marks.get(person.id) == "absent" %}selected{% endif %}>Absent</option>
+              <option value="infraction" {% if marks.get(person.id) == "infraction" %}selected{% endif %}>Infraction</option>
             </select>
           </td>
         </tr>
@@ -36,6 +37,7 @@
     <div class="inline">
       <button type="submit">Save marks</button>
       <button class="button secondary" type="button" id="mark-all-present">Mark all present</button>
+      <button class="button secondary" type="button" id="mark-all-absent">Mark all absent</button>
       {% if back_to_people_url %}
         <a class="button secondary" href="{{ back_to_people_url }}">Back to people</a>
       {% endif %}
@@ -47,12 +49,21 @@
   </form>
 </section>
 <script>
-  const markAllButton = document.getElementById("mark-all-present");
-  if (markAllButton) {
-    markAllButton.addEventListener("click", () => {
-      document.querySelectorAll('select[name^="mark_"]').forEach((select) => {
-        select.value = "present";
-      });
+  const markAllPresentButton = document.getElementById("mark-all-present");
+  const markAllAbsentButton = document.getElementById("mark-all-absent");
+  const setAllMarks = (value) => {
+    document.querySelectorAll('select[name^="mark_"]').forEach((select) => {
+      select.value = value;
+    });
+  };
+  if (markAllPresentButton) {
+    markAllPresentButton.addEventListener("click", () => {
+      setAllMarks("present");
+    });
+  }
+  if (markAllAbsentButton) {
+    markAllAbsentButton.addEventListener("click", () => {
+      setAllMarks("absent");
     });
   }
 </script>

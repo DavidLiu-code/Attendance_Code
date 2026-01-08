@@ -18,6 +18,7 @@ from .services import (
     START_SALARY,
     close_month,
     get_timezone,
+    is_core_time,
     month_start_end,
     now_local,
     preview_month,
@@ -354,8 +355,12 @@ def home(
         )
     else:
         avg_absences_active = 0
-    absent_rows = (
-        db.query(Person.name.label("name"), func.count(Mark.id).label("count"))
+    absent_marks = (
+        db.query(
+            Person.id.label("person_id"),
+            Person.name.label("name"),
+            Check.timestamp.label("timestamp"),
+        )
         .join(Mark, Mark.person_id == Person.id)
         .join(Check, Mark.check_id == Check.id)
         .filter(
@@ -364,17 +369,26 @@ def home(
             Check.timestamp >= month_start,
             Check.timestamp < month_end,
         )
-        .group_by(Person.id)
-        .having(func.count(Mark.id) > 3)
-        .order_by(func.count(Mark.id).desc())
         .all()
     )
-    max_count = max((row.count for row in absent_rows), default=0)
+    core_absent_counts = {}
+    name_map = {}
+    for row in absent_marks:
+        name_map[row.person_id] = row.name
+        if is_core_time(row.timestamp):
+            core_absent_counts[row.person_id] = core_absent_counts.get(row.person_id, 0) + 1
+    absent_rows = [
+        {"name": name_map[person_id], "count": count}
+        for person_id, count in core_absent_counts.items()
+        if count > 3
+    ]
+    absent_rows.sort(key=lambda row: row["count"], reverse=True)
+    max_count = max((row["count"] for row in absent_rows), default=0)
     absent_stats = [
         {
-            "name": row.name,
-            "count": row.count,
-            "width": int((row.count / max_count) * 100) if max_count else 0,
+            "name": row["name"],
+            "count": row["count"],
+            "width": int((row["count"] / max_count) * 100) if max_count else 0,
         }
         for row in absent_rows
     ]
@@ -473,7 +487,7 @@ def person_history(
     person = db.get(Person, person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
-    if status not in (None, "present", "absent", "unmarked"):
+    if status not in (None, "present", "absent", "unmarked", "infraction"):
         status = None
     history = (
         db.query(SalaryHistory)
@@ -519,7 +533,11 @@ def person_history(
     marks = db.query(Mark).filter(Mark.person_id == person_id).all()
     mark_map = {mark.check_id: mark.status for mark in marks}
     attendance_rows = [
-        {"check": check, "status": mark_map.get(check.id, "unmarked")}
+        {
+            "check": check,
+            "status": mark_map.get(check.id, "unmarked"),
+            "time_bucket": "core" if is_core_time(check.timestamp) else "flex",
+        }
         for check in checks
     ]
     attendance_total = len(attendance_rows)
@@ -575,7 +593,7 @@ def list_checks(
 
     total_people = db.query(Person).filter(Person.active.is_(True)).count()
     check_ids = [check.id for check in checks]
-    counts = {check_id: {"present": 0, "absent": 0} for check_id in check_ids}
+    counts = {check_id: {"present": 0, "absent": 0, "marked": 0} for check_id in check_ids}
     if check_ids:
         marks = (
             db.query(Mark)
@@ -584,14 +602,17 @@ def list_checks(
             .all()
         )
         for mark in marks:
-            if mark.status in counts[mark.check_id]:
+            if mark.check_id not in counts:
+                continue
+            counts[mark.check_id]["marked"] += 1
+            if mark.status in ("present", "absent"):
                 counts[mark.check_id][mark.status] += 1
 
     rows = []
     for check in checks:
         present = counts.get(check.id, {}).get("present", 0)
         absent = counts.get(check.id, {}).get("absent", 0)
-        marked = present + absent
+        marked = counts.get(check.id, {}).get("marked", 0)
         unmarked = max(0, total_people - marked)
         rows.append(
             {
@@ -677,7 +698,7 @@ def check_detail(
     back_to_people_url = None
     if origin == "people" and person_id:
         back_to_people_url = f"/people/{person_id}"
-        if status in ("present", "absent", "unmarked"):
+        if status in ("present", "absent", "unmarked", "infraction"):
             back_to_people_url = f"{back_to_people_url}?status={status}"
 
     return templates.TemplateResponse(
@@ -728,7 +749,7 @@ async def update_marks(
                 db.delete(mark_map[person.id])
             continue
 
-        if value not in ("present", "absent"):
+        if value not in ("present", "absent", "infraction"):
             continue
 
         if person.id in mark_map:

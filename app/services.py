@@ -11,6 +11,17 @@ START_SALARY = 50
 SALARY_STEP = 50
 SALARY_CAP = 600
 DEFAULT_TZ = "Asia/Shanghai"
+CORE_TIME_WINDOWS = ((9, 0, 11, 0), (14, 30, 17, 0))
+
+
+def is_core_time(timestamp: datetime) -> bool:
+    minute_of_day = timestamp.hour * 60 + timestamp.minute + (timestamp.second / 60)
+    for start_hour, start_minute, end_hour, end_minute in CORE_TIME_WINDOWS:
+        start = start_hour * 60 + start_minute
+        end = end_hour * 60 + end_minute
+        if start <= minute_of_day <= end:
+            return True
+    return False
 
 
 def get_timezone() -> ZoneInfo:

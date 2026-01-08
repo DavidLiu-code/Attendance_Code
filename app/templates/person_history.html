@@ -42,6 +42,12 @@
     Filtered: <span id="attendance-filter-label">{{ filter_status or "" }}</span>
     <a class="status-link" id="attendance-filter-clear" href="/people/{{ person.id }}">(clear)</a>
   </p>
+  <div class="inline" id="attendance-time-filters">
+    <span class="muted">Time window:</span>
+    <button class="button" type="button" data-time-filter="core" aria-pressed="true">Core hours (required)</button>
+    <button class="button secondary" type="button" data-time-filter="flex" aria-pressed="false">Flex hours</button>
+  </div>
+  <p class="muted">Core hours: 09:00-11:00 and 14:30-17:00. Flex hours cover all other times.</p>
   {% if attendance_rows %}
   <div class="attendance-table-wrap"{% if attendance_min_height %} style="min-height: {{ attendance_min_height }}px;"{% endif %}>
   <table class="attendance-table" id="attendance-table">
@@ -55,7 +61,7 @@
     </thead>
     <tbody>
       {% for row in attendance_rows %}
-      <tr class="attendance-row{% if filter_status and row.status != filter_status %} row-hidden{% endif %}" data-status="{{ row.status }}">
+      <tr class="attendance-row{% if filter_status and row.status != filter_status %} row-hidden{% endif %}" data-status="{{ row.status }}" data-time="{{ row.time_bucket }}">
         <td>
           {% set check_base = "/checks/" ~ row.check.id ~ "?origin=people&person_id=" ~ person.id %}
           {% set check_href = check_base %}
@@ -81,6 +87,10 @@
             <a class="status-link" data-status-filter="absent" href="{{ toggle_href }}">
               <span class="status status-absent status-badge">absent</span>
             </a>
+          {% elif row.status == "infraction" %}
+            <a class="status-link" data-status-filter="infraction" href="{{ toggle_href }}">
+              <span class="status status-infraction status-badge">infraction</span>
+            </a>
           {% else %}
             <a class="status-link" data-status-filter="unmarked" href="{{ toggle_href }}">
               <span class="status status-unmarked status-badge">unmarked</span>
@@ -102,17 +112,28 @@
     const filterWrap = document.getElementById("attendance-filter");
     const filterLabel = document.getElementById("attendance-filter-label");
     const clearLink = document.getElementById("attendance-filter-clear");
-    if (!rows.length || !filterWrap || !filterLabel || !clearLink) {
+    const timeButtons = document.querySelectorAll("[data-time-filter]");
+    if (!rows.length || !filterWrap || !filterLabel || !clearLink || !timeButtons.length) {
       return;
     }
     let currentFilter = "{{ filter_status or '' }}";
+    let currentTime = "core";
     const personId = "{{ person.id }}";
+
+    const updateTimeButtons = () => {
+      timeButtons.forEach((button) => {
+        const isActive = button.dataset.timeFilter === currentTime;
+        button.classList.toggle("secondary", !isActive);
+        button.setAttribute("aria-pressed", isActive ? "true" : "false");
+      });
+    };
 
     const applyFilter = (status) => {
       currentFilter = status || "";
       rows.forEach((row) => {
         const rowStatus = row.dataset.status;
-        const hideRow = currentFilter && rowStatus !== currentFilter;
+        const rowTime = row.dataset.time;
+        const hideRow = (currentFilter && rowStatus !== currentFilter) || rowTime !== currentTime;
         row.classList.toggle("row-hidden", hideRow);
       });
       document.querySelectorAll(".check-link").forEach((link) => {
@@ -130,6 +151,7 @@
         filterWrap.style.display = "none";
         filterLabel.textContent = "";
       }
+      updateTimeButtons();
     };
 
     clearLink.addEventListener("click", (event) => {
@@ -146,6 +168,17 @@
         event.preventDefault();
         const next = currentFilter === status ? "" : status;
         applyFilter(next);
+      });
+    });
+
+    timeButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const target = button.dataset.timeFilter;
+        if (!target) {
+          return;
+        }
+        currentTime = target;
+        applyFilter(currentFilter);
       });
     });
 
