@@ -48,6 +48,21 @@
     <button class="button secondary" type="button" data-time-filter="flex" aria-pressed="false">Flex hours</button>
     <button class="button secondary" type="button" data-time-filter="all" aria-pressed="false">All hours</button>
   </div>
+  <div class="inline" id="attendance-date-filters">
+    <span class="muted">Date range:</span>
+    <button class="button secondary" type="button" data-date-filter="this-month" aria-pressed="false">This month</button>
+    <button class="button secondary" type="button" data-date-filter="last-3" aria-pressed="false">Last 3 months</button>
+    <button class="button secondary" type="button" data-date-filter="last-6" aria-pressed="false">Last 6 months</button>
+    <button class="button" type="button" data-date-filter="all" aria-pressed="true">All records</button>
+    <button class="button secondary" type="button" data-date-filter="manual" aria-pressed="false">Manual</button>
+  </div>
+  <div class="inline" id="attendance-date-manual" style="display:none;">
+    <label for="attendance-date-start">Start</label>
+    <input type="date" id="attendance-date-start">
+    <label for="attendance-date-end">End</label>
+    <input type="date" id="attendance-date-end">
+    <button class="button secondary" type="button" id="attendance-date-apply">Apply</button>
+  </div>
   <div class="inline" id="attendance-absence-rate">
     <span class="muted">Absence rate (current view):</span>
     <span class="count" id="attendance-absence-rate-value">N/A</span>
@@ -67,7 +82,7 @@
     </thead>
     <tbody>
       {% for row in attendance_rows %}
-      <tr class="attendance-row{% if filter_status and row.status != filter_status %} row-hidden{% endif %}" data-status="{{ row.status }}" data-time="{{ row.time_bucket }}">
+      <tr class="attendance-row{% if filter_status and row.status != filter_status %} row-hidden{% endif %}" data-status="{{ row.status }}" data-time="{{ row.time_bucket }}" data-date="{{ row.check.timestamp.strftime("%Y-%m-%d") }}">
         <td>
           {% set check_base = "/checks/" ~ row.check.id ~ "?origin=people&person_id=" ~ person.id %}
           {% set check_href = check_base %}
@@ -119,14 +134,62 @@
     const filterLabel = document.getElementById("attendance-filter-label");
     const clearLink = document.getElementById("attendance-filter-clear");
     const timeButtons = document.querySelectorAll("[data-time-filter]");
+    const dateButtons = document.querySelectorAll("[data-date-filter]");
+    const manualWrap = document.getElementById("attendance-date-manual");
+    const manualStart = document.getElementById("attendance-date-start");
+    const manualEnd = document.getElementById("attendance-date-end");
+    const manualApply = document.getElementById("attendance-date-apply");
     const absenceRateValue = document.getElementById("attendance-absence-rate-value");
     const absenceRateDetail = document.getElementById("attendance-absence-rate-detail");
-    if (!rows.length || !filterWrap || !filterLabel || !clearLink || !timeButtons.length) {
+    if (!rows.length || !filterWrap || !filterLabel || !clearLink || !timeButtons.length || !dateButtons.length) {
       return;
     }
     let currentFilter = "{{ filter_status or '' }}";
     let currentTime = "core";
+    let currentDateFilter = "all";
     const personId = "{{ person.id }}";
+
+    const parseDateValue = (value) => {
+      if (!value) {
+        return null;
+      }
+      const parts = value.split("-").map((part) => parseInt(part, 10));
+      if (parts.length !== 3 || parts.some((part) => Number.isNaN(part))) {
+        return null;
+      }
+      return new Date(parts[0], parts[1] - 1, parts[2]);
+    };
+
+    const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+    const getRowDate = (row) => parseDateValue(row.dataset.date);
+
+    const getDateRange = () => {
+      if (currentDateFilter === "all") {
+        return null;
+      }
+      const today = startOfDay(new Date());
+      if (currentDateFilter === "this-month") {
+        return { start: new Date(today.getFullYear(), today.getMonth(), 1), end: today };
+      }
+      if (currentDateFilter === "last-3") {
+        return { start: new Date(today.getFullYear(), today.getMonth() - 2, 1), end: today };
+      }
+      if (currentDateFilter === "last-6") {
+        return { start: new Date(today.getFullYear(), today.getMonth() - 5, 1), end: today };
+      }
+      if (currentDateFilter === "manual") {
+        let start = parseDateValue(manualStart ? manualStart.value : "");
+        let end = parseDateValue(manualEnd ? manualEnd.value : "");
+        if (start && end && start > end) {
+          const swap = start;
+          start = end;
+          end = swap;
+        }
+        return start || end ? { start, end } : null;
+      }
+      return null;
+    };
 
     const isRowVisible = (row) => {
       const rowStatus = row.dataset.status;
@@ -137,6 +200,18 @@
       if (currentTime !== "all" && rowTime !== currentTime) {
         return false;
       }
+      if (currentDateFilter !== "all") {
+        const rowDate = getRowDate(row);
+        const range = getDateRange();
+        if (range && rowDate) {
+          if (range.start && rowDate < range.start) {
+            return false;
+          }
+          if (range.end && rowDate > range.end) {
+            return false;
+          }
+        }
+      }
       return true;
     };
 
@@ -146,6 +221,21 @@
         button.classList.toggle("secondary", !isActive);
         button.setAttribute("aria-pressed", isActive ? "true" : "false");
       });
+    };
+
+    const updateDateButtons = () => {
+      dateButtons.forEach((button) => {
+        const isActive = button.dataset.dateFilter === currentDateFilter;
+        button.classList.toggle("secondary", !isActive);
+        button.setAttribute("aria-pressed", isActive ? "true" : "false");
+      });
+    };
+
+    const updateManualVisibility = () => {
+      if (!manualWrap) {
+        return;
+      }
+      manualWrap.style.display = currentDateFilter === "manual" ? "" : "none";
     };
 
     const updateAbsenceRate = () => {
@@ -199,6 +289,8 @@
         filterLabel.textContent = "";
       }
       updateTimeButtons();
+      updateDateButtons();
+      updateManualVisibility();
       updateAbsenceRate();
     };
 
@@ -227,6 +319,35 @@
         }
         currentTime = target;
         applyFilter(currentFilter);
+      });
+    });
+
+    dateButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const target = button.dataset.dateFilter;
+        if (!target) {
+          return;
+        }
+        currentDateFilter = target;
+        applyFilter(currentFilter);
+      });
+    });
+
+    if (manualApply) {
+      manualApply.addEventListener("click", () => {
+        currentDateFilter = "manual";
+        applyFilter(currentFilter);
+      });
+    }
+
+    [manualStart, manualEnd].forEach((input) => {
+      if (!input) {
+        return;
+      }
+      input.addEventListener("change", () => {
+        if (currentDateFilter === "manual") {
+          applyFilter(currentFilter);
+        }
       });
     });
 
