@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 from .auth import get_current_user, login_user, logout_user, seed_admin_users, verify_password
+from .seed import seed_people
 from .chat_service import handle_chat_request
 from .db import SessionLocal, get_db, init_db
 from .models import Check, Mark, Person, SalaryHistory, User
@@ -41,6 +42,7 @@ def on_startup() -> None:
     db = SessionLocal()
     try:
         seed_admin_users(db)
+        seed_people(db)
     finally:
         db.close()
 
