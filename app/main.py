@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 from .auth import get_current_user, login_user, logout_user, seed_admin_users, verify_password
-from .seed import seed_people
+from .seed import DEFAULT_PEOPLE, DEFAULT_PEOPLE_ROWS, seed_people
 from .chat_service import handle_chat_request
 from .db import SessionLocal, get_db, init_db
 from .models import Check, Mark, Person, SalaryHistory, User
@@ -79,13 +79,70 @@ def safe_next(next_path: str | None) -> str:
     return "/"
 
 
+PEOPLE_ORDER = {name: idx for idx, name in enumerate(DEFAULT_PEOPLE)}
+
+
+def people_order_key(name: str) -> tuple[int, str]:
+    return (PEOPLE_ORDER.get(name, len(PEOPLE_ORDER)), name)
+
+
+def order_people(people: list[Person]) -> list[Person]:
+    return sorted(people, key=lambda person: people_order_key(person.name))
+
+
+def order_people_cards(people_cards: list[dict]) -> list[dict]:
+    return sorted(
+        people_cards,
+        key=lambda card: people_order_key(card["person"].name),
+    )
+
+
+def build_people_rows(
+    people_cards: list[dict],
+    include_placeholders: bool,
+) -> list[list[dict | None]]:
+    if not people_cards:
+        return []
+    if not include_placeholders:
+        ordered = order_people_cards(people_cards)
+        return [ordered[i:i + 4] for i in range(0, len(ordered), 4)]
+
+    card_map = {card["person"].name: card for card in people_cards}
+    used = set()
+    rows = []
+    for row in DEFAULT_PEOPLE_ROWS:
+        row_cards = []
+        for name in row:
+            if not name:
+                row_cards.append(None)
+                continue
+            card = card_map.get(name)
+            row_cards.append(card)
+            if card:
+                used.add(name)
+        rows.append(row_cards)
+
+    remaining = [
+        card
+        for card in order_people_cards(people_cards)
+        if card["person"].name not in used
+    ]
+    for i in range(0, len(remaining), 4):
+        row_cards = remaining[i:i + 4]
+        if len(row_cards) < 4:
+            row_cards = row_cards + [None] * (4 - len(row_cards))
+        rows.append(row_cards)
+
+    return rows
+
+
 def build_people_cards(
     db: Session,
     total_checks: int,
     checks_start: datetime | None = None,
     checks_end: datetime | None = None,
 ):
-    people = db.query(Person).order_by(Person.name).all()
+    people = db.query(Person).all()
     absent_query = (
         db.query(Mark.person_id, func.count(Mark.id))
         .filter(Mark.status == "absent")
@@ -187,6 +244,7 @@ def people_page(
         total_checks = db.query(func.count(Check.id)).scalar() or 0
         people_cards = build_people_cards(db, total_checks)
         scope_label = "all checks"
+        include_placeholders = True
     else:
         total_checks = (
             db.query(func.count(Check.id))
@@ -199,11 +257,14 @@ def people_page(
         )
         people_cards = [card for card in people_cards if card["absent_count"] > 3]
         scope_label = f"{current_month}"
+        include_placeholders = False
+    people_rows = build_people_rows(people_cards, include_placeholders)
     return templates.TemplateResponse(
         "people.html",
         {
             "request": request,
             "people_cards": people_cards,
+            "people_rows": people_rows,
             "total_checks": total_checks,
             "scope_label": scope_label,
             "start_salary": START_SALARY,
@@ -688,7 +749,8 @@ def check_detail(
     if not check:
         raise HTTPException(status_code=404, detail="Check not found")
 
-    people = db.query(Person).filter(Person.active.is_(True)).order_by(Person.name).all()
+    people = db.query(Person).filter(Person.active.is_(True)).all()
+    people = order_people(people)
     marks = (
         db.query(Mark)
         .join(Person, Mark.person_id == Person.id)
