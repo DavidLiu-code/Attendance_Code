@@ -81,6 +81,8 @@ def safe_next(next_path: str | None) -> str:
 
 PEOPLE_ORDER = {name: idx for idx, name in enumerate(DEFAULT_PEOPLE)}
 
+ADD_PERSON_CARD = {"kind": "add_person"}
+
 
 def people_order_key(name: str) -> tuple[int, str]:
     return (PEOPLE_ORDER.get(name, len(PEOPLE_ORDER)), name)
@@ -100,8 +102,11 @@ def order_people_cards(people_cards: list[dict]) -> list[dict]:
 def build_people_rows(
     people_cards: list[dict],
     include_placeholders: bool,
+    include_add_card: bool,
 ) -> list[list[dict | None]]:
     if not people_cards:
+        if include_add_card:
+            return [[ADD_PERSON_CARD, None, None, None]]
         return []
     if not include_placeholders:
         ordered = order_people_cards(people_cards)
@@ -110,10 +115,19 @@ def build_people_rows(
     card_map = {card["person"].name: card for card in people_cards}
     used = set()
     rows = []
-    for row in DEFAULT_PEOPLE_ROWS:
+    start_index = 0
+    if include_add_card:
+        first_name = DEFAULT_PEOPLE_ROWS[0][0] if DEFAULT_PEOPLE_ROWS else None
+        first_card = card_map.get(first_name) if first_name else None
+        if first_card:
+            used.add(first_name)
+        rows.append([ADD_PERSON_CARD, None, None, first_card])
+        start_index = 1
+
+    for row in DEFAULT_PEOPLE_ROWS[start_index:]:
         row_cards = []
         for name in row:
-            if not name:
+            if not name or name in used:
                 row_cards.append(None)
                 continue
             card = card_map.get(name)
@@ -245,6 +259,7 @@ def people_page(
         people_cards = build_people_cards(db, total_checks)
         scope_label = "all checks"
         include_placeholders = True
+        include_add_card = True
     else:
         total_checks = (
             db.query(func.count(Check.id))
@@ -258,7 +273,8 @@ def people_page(
         people_cards = [card for card in people_cards if card["absent_count"] > 3]
         scope_label = f"{current_month}"
         include_placeholders = False
-    people_rows = build_people_rows(people_cards, include_placeholders)
+        include_add_card = False
+    people_rows = build_people_rows(people_cards, include_placeholders, include_add_card)
     return templates.TemplateResponse(
         "people.html",
         {

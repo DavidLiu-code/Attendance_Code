@@ -5,25 +5,24 @@
     <h2>People</h2>
     <span class="muted">Absence rate = absences / checks ({{ total_checks }}) for {{ scope_label }}.</span>
   </div>
-  {% if current_user and current_user.role == "admin" %}
-    <article class="card stack">
-      <h3>Add person</h3>
-      <form method="post" action="/people" class="stack">
-        <div>
-          <label for="name">Name</label>
-          <input id="name" name="name" placeholder="Jane Doe" required>
-        </div>
-        <button type="submit">Add person</button>
-      </form>
-      <p class="muted">Starting salary is {{ start_salary }}.</p>
-    </article>
-  {% endif %}
 
-  {% if people_cards %}
+  {% if people_rows %}
     <div class="grid people-grid">
       {% for row in people_rows %}
         {% for card in row %}
-          {% if card %}
+          {% if card and card.kind == "add_person" %}
+            <article class="card stack">
+              <h3>Add person</h3>
+              <form method="post" action="/people" class="stack">
+                <div>
+                  <label for="name">Name</label>
+                  <input id="name" name="name" placeholder="Jane Doe" required>
+                </div>
+                <button type="submit">Add person</button>
+              </form>
+              <p class="muted">Starting salary is {{ start_salary }}.</p>
+            </article>
+          {% elif card %}
             <article class="card stack">
               <div class="inline">
                 <div>
@@ -72,6 +71,9 @@
         {% endfor %}
       {% endfor %}
     </div>
+    {% if current_user and current_user.role == "admin" and not people_cards %}
+      <p class="muted">No people yet. Add your first person.</p>
+    {% endif %}
   {% else %}
     {% if current_user and current_user.role == "admin" %}
       <p class="muted">No people yet. Add your first person.</p>
