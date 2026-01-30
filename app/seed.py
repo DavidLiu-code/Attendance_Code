@@ -5,7 +5,7 @@ from .services import START_SALARY
 
 DEFAULT_PEOPLE_ROWS = (
     ('宋新雷', '', '', ''),
-    ('李丽君', '张梓', '郑柳', '王福州'),
+    ('李丽君', '张梓璇', '郑柳', '王福州'),
     ('徐梦溪', '陈梦菡', '李浩然', '余宏知'),
     ('郭梦琼', '刘若彤', '白婷婷', '王庆芳'),
     ('夏盛培', '袁晨栋', '黄婧', '闫帆'),
@@ -16,7 +16,8 @@ DEFAULT_PEOPLE_ROWS = (
 DEFAULT_PEOPLE = [name for row in DEFAULT_PEOPLE_ROWS for name in row if name]
 
 NAME_UPDATES = {
-    "张梓斌": "张梓",
+    "张梓斌": "张梓璇",
+    "张梓": "张梓璇",
     "陈梦涵": "陈梦菡",
     "焦春哲": "焦睿哲",
 }
