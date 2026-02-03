@@ -130,3 +130,17 @@ class ChatUserScope(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "person_id", name="uq_chat_user_scope"),
     )
+
+
+class ChatSettings(Base):
+    __tablename__ = "chat_settings"
+
+    id = Column(Integer, primary_key=True)
+    api_key = Column(Text, nullable=True)
+    base_url = Column(String, nullable=True)
+    default_model_key = Column(String, nullable=True)
+    model_catalog_json = Column(Text, nullable=True)
+    enable_retrieval = Column(Boolean, nullable=True)
+    retrieval_k = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

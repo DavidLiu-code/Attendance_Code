@@ -14,6 +14,50 @@
   </p>
 </section>
 
+{% if chat_settings %}
+<section class="card stack">
+  <h3>Chat settings</h3>
+  <form method="post" action="/chat/settings" class="stack">
+    <div class="grid">
+      <div>
+        <label for="base_url">Base URL</label>
+        <input id="base_url" name="base_url" value="{{ chat_settings.base_url }}" placeholder="https://api-inference.modelscope.cn/v1">
+      </div>
+      <div>
+        <label for="default_model_key">Default model key</label>
+        <input id="default_model_key" name="default_model_key" value="{{ chat_settings.default_model_key }}" placeholder="balanced">
+      </div>
+    </div>
+    <div>
+      <label for="api_key">API key</label>
+      <input id="api_key" name="api_key" type="password" placeholder="{% if chat_settings.api_key_set %}Saved (leave blank to keep){% else %}Not set{% endif %}">
+      <p class="muted">Leave blank to keep the current key.</p>
+    </div>
+    <div>
+      <label for="model_catalog_json">Model catalog (JSON)</label>
+      <textarea id="model_catalog_json" name="model_catalog_json" rows="6">{{ chat_settings.model_catalog_json }}</textarea>
+      {% if chat_settings.model_catalog_keys %}
+        <p class="muted">Known keys: {{ chat_settings.model_catalog_keys | join(", ") }}</p>
+      {% endif %}
+    </div>
+    <div class="grid">
+      <div>
+        <label for="enable_retrieval">RAG (chat retrieval)</label>
+        <select id="enable_retrieval" name="enable_retrieval">
+          <option value="1" {% if chat_settings.enable_retrieval %}selected{% endif %}>Enabled</option>
+          <option value="0" {% if not chat_settings.enable_retrieval %}selected{% endif %}>Disabled</option>
+        </select>
+      </div>
+      <div>
+        <label for="retrieval_k">Retrieval K</label>
+        <input id="retrieval_k" name="retrieval_k" type="number" min="1" max="50" value="{{ chat_settings.retrieval_k or '' }}">
+      </div>
+    </div>
+    <button type="submit">Save settings</button>
+  </form>
+</section>
+{% endif %}
+
 {% if answer %}
 <section class="card stack">
   <h3>Answer</h3>

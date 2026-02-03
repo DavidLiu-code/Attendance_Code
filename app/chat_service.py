@@ -7,8 +7,9 @@ from typing import Any
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
-from .chat_client import DEFAULT_MODEL_KEY, MODEL_CATALOG, get_llm_client, get_model_name
+from .chat_client import get_llm_client, get_model_name
 from .chat_retrieval import retrieve_memory, store_embedding
+from .chat_settings import get_chat_config
 from .models import ChatMessage, ChatSession, ChatSummary, ChatUserScope, Person
 from .services import now_local
 
@@ -49,10 +50,22 @@ def handle_chat_request(db: Session, payload: dict, llm_client=None) -> dict:
     if not message:
         return {"error": "message is required."}
 
-    session = get_or_create_session(db, session_id, user_id, role)
+    chat_config = get_chat_config(db)
+    model_catalog = chat_config["model_catalog"]
+    default_model_key = chat_config["default_model_key"]
+    enable_retrieval = chat_config["enable_retrieval"]
+    retrieval_k = chat_config["retrieval_k"]
+
+    session = get_or_create_session(db, session_id, user_id, role, default_model_key)
     requested_model_key = model_key
-    model_key = resolve_model_key(model_key, session.default_model_key, message)
-    model_name = get_model_name(model_key)
+    model_key = resolve_model_key(
+        model_key,
+        session.default_model_key,
+        message,
+        model_catalog,
+        default_model_key,
+    )
+    model_name = get_model_name(model_key, model_catalog, default_model_key)
     if requested_model_key and session.default_model_key != requested_model_key:
         session.default_model_key = requested_model_key
         session.updated_at = now_local()
@@ -62,14 +75,17 @@ def handle_chat_request(db: Session, payload: dict, llm_client=None) -> dict:
 
     user_meta = {"model_key": model_key}
     user_message = store_session_message(db, session.session_id, "user", message, user_meta)
-    store_embedding(db, user_message.id, message)
+    store_embedding(db, user_message.id, message, enabled=enable_retrieval)
 
     summary_text = get_session_summary(db, session.session_id)
     recent_messages = get_session_messages(db, session.session_id, CHAT_RECENT_LIMIT)
-    memory = retrieve_memory(db, session.session_id, message)
+    memory = retrieve_memory(db, session.session_id, message, k=retrieval_k, enabled=enable_retrieval)
     schema = lookup_schema()
 
-    llm_client = llm_client or get_llm_client()
+    llm_client = llm_client or get_llm_client(
+        api_key=chat_config["api_key"],
+        base_url=chat_config["base_url"],
+    )
 
     plan = build_plan(
         llm_client,
@@ -103,7 +119,13 @@ def handle_chat_request(db: Session, payload: dict, llm_client=None) -> dict:
                 summary_text,
             )
             store_assistant_response(db, session.session_id, response["answer"], response)
-            update_session_summary_if_needed(db, session.session_id, llm_client)
+            update_session_summary_if_needed(
+                db,
+                session.session_id,
+                llm_client,
+                model_catalog,
+                default_model_key,
+            )
             return response
         for request in sql_requests:
             query = request.get("query", "")
@@ -167,8 +189,14 @@ def handle_chat_request(db: Session, payload: dict, llm_client=None) -> dict:
     store_assistant_response(db, session.session_id, response["answer"], response)
     message_id = response_meta_id(db, session.session_id)
     if message_id:
-        store_embedding(db, message_id, response["answer"])
-    update_session_summary_if_needed(db, session.session_id, llm_client)
+        store_embedding(db, message_id, response["answer"], enabled=enable_retrieval)
+    update_session_summary_if_needed(
+        db,
+        session.session_id,
+        llm_client,
+        model_catalog,
+        default_model_key,
+    )
     return response
 
 
@@ -186,14 +214,20 @@ def response_meta_id(db: Session, session_id: str) -> int:
     return last.id if last else 0
 
 
-def resolve_model_key(requested: str | None, session_default: str, message: str) -> str:
+def resolve_model_key(
+    requested: str | None,
+    session_default: str,
+    message: str,
+    model_catalog: dict,
+    default_model_key: str,
+) -> str:
     if requested:
         return requested
     lowered = message.lower()
     if "long report" in lowered or "detailed analysis" in lowered or "full report" in lowered:
-        if "long" in MODEL_CATALOG:
+        if "long" in model_catalog:
             return "long"
-    return session_default or DEFAULT_MODEL_KEY
+    return session_default or default_model_key
 
 
 def question_needs_db(message: str) -> bool:
@@ -513,7 +547,13 @@ def update_session_summary(db: Session, session_id: str, summary_text: str) -> N
     db.commit()
 
 
-def update_session_summary_if_needed(db: Session, session_id: str, llm_client=None) -> None:
+def update_session_summary_if_needed(
+    db: Session,
+    session_id: str,
+    llm_client=None,
+    model_catalog: dict | None = None,
+    default_model_key: str | None = None,
+) -> None:
     count = (
         db.query(ChatMessage)
         .filter(ChatMessage.session_id == session_id)
@@ -541,7 +581,13 @@ def update_session_summary_if_needed(db: Session, session_id: str, llm_client=No
 
     summary_text = get_session_summary(db, session_id) or ""
     llm_client = llm_client or get_llm_client()
-    summarizer_name = MODEL_CATALOG.get("summarizer") or get_model_name(DEFAULT_MODEL_KEY)
+    model_catalog = model_catalog or {}
+    default_model_key = default_model_key or "balanced"
+    summarizer_name = model_catalog.get("summarizer") or get_model_name(
+        default_model_key,
+        model_catalog,
+        default_model_key,
+    )
 
     summary_prompt = (
         "Summarize the following chat history into a concise memory. "
@@ -596,7 +642,13 @@ def redact_row(row: dict, scope: dict) -> dict:
     return redacted
 
 
-def get_or_create_session(db: Session, session_id: str | None, user_id: str, role: str) -> ChatSession:
+def get_or_create_session(
+    db: Session,
+    session_id: str | None,
+    user_id: str,
+    role: str,
+    default_model_key: str,
+) -> ChatSession:
     now = now_local()
     if session_id:
         session = (
@@ -614,7 +666,7 @@ def get_or_create_session(db: Session, session_id: str | None, user_id: str, rol
         session_id=new_session_id,
         user_id=user_id,
         role=role,
-        default_model_key=DEFAULT_MODEL_KEY,
+        default_model_key=default_model_key,
         created_at=now,
         updated_at=now,
     )

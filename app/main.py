@@ -13,6 +13,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from .auth import get_current_user, login_user, logout_user, seed_admin_users, verify_password
 from .seed import DEFAULT_PEOPLE, DEFAULT_PEOPLE_ROWS, seed_people
 from .chat_service import handle_chat_request
+from .chat_settings import get_chat_settings_view, update_chat_settings
 from .db import SessionLocal, get_db, init_db
 from .models import Check, Mark, Person, SalaryHistory, User
 from .services import (
@@ -315,11 +316,15 @@ def export_page(
 @app.get("/chat", response_class=HTMLResponse)
 def chat_page(
     request: Request,
+    db: Session = Depends(get_db),
     current_user: User | None = Depends(get_current_user),
     msg: str | None = None,
     error: str | None = None,
 ):
     session_id = request.session.get("chat_session_id")
+    chat_settings = None
+    if current_user and current_user.role == "admin":
+        chat_settings = get_chat_settings_view(db)
     return templates.TemplateResponse(
         "chat.html",
         {
@@ -330,6 +335,7 @@ def chat_page(
             "clarifying_question": None,
             "data_preview": None,
             "session_id": session_id,
+            "chat_settings": chat_settings,
             "current_user": current_user,
             "msg": msg,
             "error": error,
@@ -344,6 +350,10 @@ def chat_action(
     db: Session = Depends(get_db),
     current_user: User | None = Depends(get_current_user),
 ):
+    chat_settings = None
+    if current_user and current_user.role == "admin":
+        chat_settings = get_chat_settings_view(db)
+
     payload = {
         "session_id": request.session.get("chat_session_id"),
         "user_id": current_user.username if current_user else "visitor",
@@ -363,6 +373,7 @@ def chat_action(
                 "clarifying_question": None,
                 "data_preview": None,
                 "session_id": request.session.get("chat_session_id"),
+                "chat_settings": chat_settings,
                 "current_user": current_user,
                 "msg": None,
                 "error": result["error"],
@@ -380,11 +391,55 @@ def chat_action(
             "clarifying_question": None,
             "data_preview": result.get("data_preview"),
             "session_id": result.get("session_id"),
+            "chat_settings": chat_settings,
             "current_user": current_user,
             "msg": None,
             "error": None,
         },
     )
+
+
+@app.post("/chat/settings")
+def chat_settings_action(
+    request: Request,
+    api_key: str | None = Form(None),
+    base_url: str | None = Form(None),
+    default_model_key: str | None = Form(None),
+    model_catalog_json: str | None = Form(None),
+    enable_retrieval: str | None = Form(None),
+    retrieval_k: str | None = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user),
+):
+    guard = require_admin(request, current_user)
+    if guard:
+        return guard
+    api_key = (api_key or "").strip()
+    base_url = (base_url or "").strip()
+    default_model_key = (default_model_key or "").strip()
+    model_catalog_json = (model_catalog_json or "").strip()
+    enable_retrieval_flag = (enable_retrieval or "").strip() == "1"
+    retrieval_k_value = None
+    if retrieval_k and retrieval_k.strip():
+        try:
+            retrieval_k_value = int(retrieval_k)
+        except ValueError:
+            return redirect("/chat", error="Retrieval K must be a number.")
+        if retrieval_k_value < 1 or retrieval_k_value > 50:
+            return redirect("/chat", error="Retrieval K must be between 1 and 50.")
+    try:
+        update_chat_settings(
+            db,
+            api_key=api_key or None,
+            base_url=base_url,
+            default_model_key=default_model_key,
+            model_catalog_json=model_catalog_json,
+            enable_retrieval=enable_retrieval_flag,
+            retrieval_k=retrieval_k_value,
+        )
+    except ValueError as exc:
+        return redirect("/chat", error=str(exc))
+    return redirect("/chat", msg="Chat settings updated.")
 
 
 @app.post("/api/chat")
